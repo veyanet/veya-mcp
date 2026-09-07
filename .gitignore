@@ -11,3 +11,5 @@ Thumbs.db
 *.tsbuildinfo
 coverage/
 .turbo/
+
+_rebuild_history.ps1
