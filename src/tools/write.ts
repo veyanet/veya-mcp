@@ -41,7 +41,7 @@ export function registerWriteTools(
 
   server.tool(
     "veya_store_commitment",
-    "Write a 32-byte commitment to Veya.sol (requires MCP_API_KEY). Use content Use stamps prefer product-site + API.",
+    "Write a 32-byte commitment to Veya.sol (requires MCP_API_KEY). Guest Use stamps prefer the product console + API.",
     {
       environmentUuidHex: z.string().min(32),
       commitmentHex: z.string().min(64),
@@ -106,6 +106,64 @@ export function registerWriteTools(
         parseHexBytes(environmentUuidHex, 16),
         parseHexBytes(pqPubkeyHashHex, 32),
         envType,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ txHash, explorer: client.explorerFor(txHash) }, null, 2),
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    "veya_register_pq_onchain",
+    "Generate ML-DSA identity and register environment + commitment on Veya.sol (requires MCP_API_KEY)",
+    {
+      envType: z.number().int().min(0).max(10).default(1),
+    },
+    async ({ envType }) => {
+      requireAuth();
+      const client = createWriteClient(cfg);
+      const result = await client.registerPqOnchain(envType);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(
+              {
+                publicKeyHex: Buffer.from(result.publicKey).toString("hex"),
+                publicKeyHash: result.publicKeyHash,
+                environmentTx: result.environmentTx,
+                memoTx: result.memoTx,
+                explorer: result.explorer,
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+      };
+    },
+  );
+
+  server.tool(
+    "veya_anchor_pq_attestation",
+    "Link PQ identity hash to execution hash on Veya.sol (requires MCP_API_KEY)",
+    {
+      environmentUuidHex: z.string().min(32),
+      identityHashHex: z.string().min(64),
+      executionHashHex: z.string().min(64),
+    },
+    async ({ environmentUuidHex, identityHashHex, executionHashHex }) => {
+      requireAuth();
+      const client = createWriteClient(cfg);
+      const txHash = await client.requireEvm().anchorPqAttestation(
+        parseHexBytes(environmentUuidHex, 16),
+        parseHexBytes(identityHashHex, 32),
+        parseHexBytes(executionHashHex, 32),
       );
       return {
         content: [
