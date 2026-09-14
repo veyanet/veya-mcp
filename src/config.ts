@@ -9,12 +9,14 @@ export type McpServiceConfig = {
   apiUrl: string;
   mcpApiKey: string | null;
   relayerPrivateKey: string | null;
+  validatorNodes: string[];
+  sealedNodeUrl: string;
   corsOrigins: string[];
   nodeEnv: string;
 };
 
 export const MCP_SERVICE_NAME = "@veyanet/mcp";
-export const MCP_SERVICE_VERSION = "1.0.0";
+export const MCP_SERVICE_VERSION = "1.1.0";
 
 export function loadConfig(): McpServiceConfig {
   const mcpApiKey = process.env.MCP_API_KEY?.trim() || null;
@@ -36,6 +38,12 @@ export function loadConfig(): McpServiceConfig {
     apiUrl: (process.env.VEYA_API_URL || "https://api.veyanet.tech").replace(/\/$/, ""),
     mcpApiKey,
     relayerPrivateKey: relayer,
+    validatorNodes: (process.env.VEYA_VALIDATOR_NODES ||
+      "http://127.0.0.1:7701,http://127.0.0.1:7702,http://127.0.0.1:7703")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    sealedNodeUrl: (process.env.VEYA_SEALED_NODE_URL || "http://127.0.0.1:7800").replace(/\/$/, ""),
     corsOrigins: (process.env.CORS_ORIGIN || "")
       .split(",")
       .map((s) => s.trim())
