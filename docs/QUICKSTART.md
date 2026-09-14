@@ -1,111 +1,192 @@
-# Quickstart Guide — VEYA MCP
+# Quickstart Guide — `@veyanet/mcp`
 
-This guide takes a stranger from zero to a verified chain ping, then a developer from clone to smoke green. It mirrors the “first success” role of the SDK quickstart, but for Streamable HTTP MCP.
+From zero to a verified chain ping using **public** VEYA surfaces: the paste URL, optional `@veyanet/sdk`, and `https://api.veyanet.tech`.
 
-## Part 1 — Stranger (no code, no keys)
+**[Tools](./TOOLS.md)** • **[Architecture](./ARCHITECTURE.md)** • **[Network pin](./NETWORK_PIN.md)** • **[Verification](./VERIFICATION.md)**
 
-### Step 1 — Add the MCP URL
+---
 
-In Claude or Cursor, add a custom MCP connector with **Streamable HTTP** transport:
+## Table of contents
+
+1. [What you will use](#1-what-you-will-use)
+2. [Part 1 — Connect the public MCP](#2-part-1--connect-the-public-mcp)
+3. [Part 2 — Optional guest Use path](#3-part-2--optional-guest-use-path)
+4. [Part 3 — TypeScript SDK](#4-part-3--typescript-sdk)
+5. [What consensus and sealed mean for you](#5-what-consensus-and-sealed-mean-for-you)
+6. [Optional: run the HTTP binary yourself](#6-optional-run-the-http-binary-yourself)
+7. [If something fails](#7-if-something-fails)
+8. [Next reading](#8-next-reading)
+
+---
+
+## 1. What you will use
+
+| Surface | URL / package |
+|---------|----------------|
+| Public MCP | `https://mcp.veyanet.tech/mcp` |
+| MCP health | `https://mcp.veyanet.tech/health` |
+| Product API | `https://api.veyanet.tech` |
+| TypeScript library | `@veyanet/sdk` on npm |
+
+You need Node only if you install the SDK. Claude/Cursor users need neither Node nor a key.
+
+```mermaid
+flowchart LR
+  A["Paste MCP URL"] --> B["veya_describe"]
+  B --> C["veya_ping_chain"]
+  C --> D["veya_verify_transaction"]
+  D --> E["Optional guest login"]
+```
+
+---
+
+## 2. Part 1 — Connect the public MCP
+
+### Step 1 — Add the connector
+
+In Claude or Cursor, add a custom MCP server with **Streamable HTTP** (not stdio):
 
 ```text
 https://mcp.veyanet.tech/mcp
 ```
 
+Optional check in a terminal:
+
+```bash
+curl -s https://mcp.veyanet.tech/health
+```
+
+You want `service` = `@veyanet/mcp`, `chainId` = `46630`, `sealed` mentioning AES-256-GCM.
+
 ### Step 2 — Honesty card
 
 Ask the agent:
 
-> Call `veya_describe` and summarize settlement and sealed claims.
+> Call `veya_describe` and summarize settlement, sealed, and whether writes are on.
 
 You should see:
-* `@veyanet/mcp`
-* chain id **46630**
-* `Veya.sol` address
-* sealed = **AES-256-GCM** (not FHE)
-* mainnet deferred
+
+- Package `@veyanet/mcp`
+- Chain id **46630**
+- Contract `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`
+- Sealed = **AES-256-GCM**
+- Settlement = Robinhood testnet **46630**
+- Writes need Bearer **when enabled** (public host usually off)
+- Fleet belongs to the product API; unreachable capacity fails closed
 
 ### Step 3 — Live chain ping
 
 > Call `veya_ping_chain`.
 
-Confirm `expectedChainId` / chain id is **46630** and a recent block number appears.
+Confirm chain id **46630** and a block number. If this fails, later verify/write will fail too — RPC or pin problem.
 
-### Step 4 — Verify a transaction
+### Step 4 — Verify a real transaction
 
-> Call `veya_verify_transaction` with tx  
+> Call `veya_verify_transaction` with  
 > `0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8`
 
-Expect a parsed Veya event (e.g. `CommitmentStored`) and digest hex. Cross-check the hash on the Robinhood testnet explorer.
+Expect parsed `Veya.sol` events (for example `CommitmentStored`) and a digest. Open the Robinhood testnet explorer and match the `to` address to the contract.
 
-### Step 5 — Optional API health
+This proves a commitment landed. It does **not** prove FHE.
+
+### Step 5 — Product API health
 
 > Call `veya_api_health`.
 
-The product API may return `degraded` if validators/sealed are down. That is honest status from `api.veyanet.tech`, not a requirement that MCP itself is broken.
+This is `GET https://api.veyanet.tech/health`. A **`degraded`** body usually means validators/sealed are not running on the API host. That is honest. MCP describe/ping can still work.
 
 ---
 
-## Part 2 — Developer (local)
+## 3. Part 2 — Optional guest Use path
 
-### Prerequisites
-* Node.js ≥ 20
-* Network access to Robinhood testnet RPC
+> Call `veya_guest_login`. Then call `veya_list_environments` with the returned token as `sessionToken`.
 
-### Install and run
+Guest is **Use-only**:
 
-```bash
-cd robinhood/sdk
-npm install
-npm run build
+| Allowed | Not allowed (403) |
+|---------|-------------------|
+| List showcase / Use scope | Create environment |
+| List / anchor content proofs | Deploy agent |
+| | Protected Build execution |
+| | Boundnet Build invoke |
 
-cd ../hosted-mcp
-npm install
-npm run build
-cp .env.example .env
-npm start
-```
+403 is policy, not a broken MCP.
 
-Local paste URL:
+To Build, you need a **wallet JWT** from the product API (`/auth/nonce` + `/auth/verify`). MCP has no wallet popup.
 
-```text
-http://127.0.0.1:8788/mcp
-```
-
-```bash
-claude mcp add veya-local --transport http http://127.0.0.1:8788/mcp
-```
-
-### Verify locally
-
-```bash
-npm run lint
-npm test
-npm run smoke
-curl -s http://127.0.0.1:8788/health
-```
-
-Smoke must print `PASS` after `veya_describe` and `veya_ping_chain`.
+Guest stamps are a shared demo Use path. They are not the official token-customer story.
 
 ---
 
-## Part 3 — Operator writes (optional)
+## 4. Part 3 — TypeScript SDK
 
-Only if you intend authenticated on-chain tools on testnet:
+If you are writing a backend or script:
 
-1. Generate a long random `MCP_API_KEY`.
-2. Fund a Robinhood **testnet** key; set `VEYA_RELAYER_PRIVATE_KEY`.
-3. Restart; `/health` must show `"writesEnabled": true`.
-4. Call write tools only with `Authorization: Bearer <MCP_API_KEY>`.
-5. Confirm returned `txHash` on the explorer.
+```bash
+npm install @veyanet/sdk
+```
 
-Do not enable writes on a public server without rate limits, key rotation, and a dedicated relayer wallet.
+```ts
+import { VeyaClient } from "@veyanet/sdk";
+
+const client = new VeyaClient({
+  // defaults: Robinhood testnet 46630 + public Veya.sol
+});
+
+const ping = await client.pingChain();
+console.log(ping.chainId.toString()); // "46630"
+```
+
+MCP remains the paste-URL agent surface. The SDK is crypto + chain in **your** process.
 
 ---
 
-## Next reading
+## 5. What consensus and sealed mean for you
 
-* [TOOLS.md](./TOOLS.md) — full argument lists
-* [VERIFICATION.md](./VERIFICATION.md) — audit-grade verify path
-* [DEPLOYMENT.md](./DEPLOYMENT.md) — `mcp.veyanet.tech` TLS
-* [AUTHENTICATION.md](./AUTHENTICATION.md) — Bearer model
+Tools like `veya_run_consensus` and `veya_sealed_execute` exist on the public MCP. They call **fleet URLs configured on the MCP host**. On production those should be the API-owned validators/sealed-node.
+
+If that fleet is down, you get an error or `consensus_reached: false`.
+
+Sealed = **AES-256-GCM**. The public paste URL is `https://mcp.veyanet.tech/mcp`.
+
+---
+
+## 6. Optional: run the HTTP binary yourself
+
+Only if you **operate** a host. Strangers should stay on `https://mcp.veyanet.tech/mcp`.
+
+```bash
+npm install -g @veyanet/mcp
+veya-mcp
+# or: npx -y @veyanet/mcp
+```
+
+This starts **Streamable HTTP** on `PORT` (default 8788). Point a local client at `http://127.0.0.1:8788/mcp` for your own tests. After TLS, advertise the public HTTPS URL. See [DEPLOYMENT.md](./DEPLOYMENT.md) and [CONFIGURATION.md](./CONFIGURATION.md).
+
+Leave `MCP_API_KEY` empty unless you intend Bearer writes on **that** process.
+
+---
+
+## 7. If something fails
+
+| Symptom | Likely cause |
+|---------|----------------|
+| Connector timeout | MCP host / TLS |
+| Health ok, ping fails | Robinhood RPC |
+| Describe ok, guest fails | Product API |
+| API health `degraded` | Fleet on API host |
+| Create environment 403 | Guest is not Build |
+| Write tools missing | Public host, writes off — expected |
+| Write Unauthorized | Need Bearer `MCP_API_KEY` on a writes-enabled host |
+
+More: [VERIFICATION.md](./VERIFICATION.md).
+
+---
+
+## 8. Next reading
+
+- [TOOLS.md](./TOOLS.md) — every tool, arguments, what it does **not** do  
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — pictures of layers and trust  
+- [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
+- [AUTHENTICATION.md](./AUTHENTICATION.md) — Bearer vs session  
+- [SDK_BRIDGE.md](./SDK_BRIDGE.md) — MCP vs SDK  
