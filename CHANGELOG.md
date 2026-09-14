@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.1.0] — 2026-09-11
+
+### Added
+- Full public tool surface: PQ crypto, fleet/sealed/coordination, local memory, public registry + on-chain reads, product API session tools (guest login, environments, agents, proofs, Boundnet).
+- On-chain write helpers: `veya_register_pq_onchain`, `veya_anchor_pq_attestation` (still Bearer + relayer gated).
+- Config: `VEYA_VALIDATOR_NODES`, `VEYA_SEALED_NODE_URL` for server-side fleet (backend/API-owned in production).
+
+### Changed
+- Package is no longer a 6-tool teaser; auth tiers and fail-closed fleet/writes remain.
+- Landing `GET /` redesigned: always advertises `https://mcp.veyanet.tech/mcp`.
+- Docs rewritten for GitHub strangers: public MCP + `@veyanet/sdk` + `api.veyanet.tech` only. Consensus validators are backend/API-owned — no localhost user path.
+
+
 ## [1.0.0] — 2026-09-07
 
 ### Added
