@@ -1,119 +1,246 @@
-# Deployment Guide — VEYA MCP
+# Deployment Guide — `@veyanet/mcp`
 
-Production target: **`https://mcp.veyanet.tech/mcp`**  
-Package: `@veyanet/mcp` in monorepo directory `robinhood/hosted-mcp/`  
-Stdio sibling (not this service): `veya-anchor/packages/mcp/`
+How to run the MCP Node process behind TLS so agents can paste a public HTTPS URL.
 
-## Architecture on the host
+**Public paste URL:** `https://mcp.veyanet.tech/mcp`  
+**Product API:** `https://api.veyanet.tech`  
+**npm:** `@veyanet/mcp@1.1.0`
+
+Strangers only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
+
+**[Configuration](./CONFIGURATION.md)** • **[Authentication](./AUTHENTICATION.md)** • **[Transport](./TRANSPORT.md)** • **[Architecture](./ARCHITECTURE.md)**
+
+---
+
+## Table of contents
+
+1. [What you are deploying](#1-what-you-are-deploying)
+2. [Where the rest of the stack runs](#2-where-the-rest-of-the-stack-runs)
+3. [Architecture on the host](#3-architecture-on-the-host)
+4. [Install and build](#4-install-and-build)
+5. [Required production env](#5-required-production-env)
+6. [Reverse proxy](#6-reverse-proxy)
+7. [Process manager](#7-process-manager)
+8. [Health and landing checks](#8-health-and-landing-checks)
+9. [Writes: public vs private instance](#9-writes-public-vs-private-instance)
+10. [Fleet on the same machine](#10-fleet-on-the-same-machine)
+11. [Secrets](#11-secrets)
+12. [Rollback](#12-rollback)
+
+---
+
+## 1. What you are deploying
+
+A Node 20+ HTTP server (`veya-mcp` / `node dist/cli.js`) that:
+
+- Serves `GET /`, `GET /health`, `POST /mcp`
+- Registers MCP tools
+- Calls `@veyanet/sdk` and `https://api.veyanet.tech`
+
+This package is the MCP HTTP process.
+
+---
+
+## 2. Where the rest of the stack runs
+
+| Component | Where it lives |
+|-----------|----------------|
+| Product REST + database | API host (`api.veyanet.tech`) |
+| validator-node ×3 | API host / private fleet (defaults `7701–7703` if colocated) |
+| sealed-node | API host / private fleet (default `7800`) |
+| Chain | Robinhood public testnet |
+
+If you only deploy MCP and the API fleet is down, describe/ping/verify can still work; consensus/sealed/guest Build paths follow the API and fleet.
+
+---
+
+## 3. Architecture on the host
 
 ```text
-Internet → TLS (mcp.veyanet.tech) → nginx → 127.0.0.1:8788 → node dist/cli.js
+Internet
+   │ TLS (Let’s Encrypt / your cert)
+   ▼
+Reverse proxy (nginx, Caddy, Traefik)
+   │ HTTP to 127.0.0.1:8788
+   │ Forward Authorization
+   ▼
+Node @veyanet/mcp
+   │
+   ├── Robinhood RPC (public)
+   ├── api.veyanet.tech (HTTPS)
+   └── optional: 127.0.0.1:7701–7703 / 7800 if fleet is local
 ```
 
-## Build on the server
+```mermaid
+flowchart LR
+  Net["Internet"] --> TLS["TLS terminator"]
+  TLS --> Node["veya-mcp :8788"]
+  Node --> RPC["rpc.testnet.chain.robinhood.com"]
+  Node --> API["api.veyanet.tech"]
+  Node --> Fleet["optional local fleet"]
+```
+
+Never publish the private bind address as the product paste URL. Always:
 
 ```bash
-cd /opt/veya/sdk   # or your checkout path for robinhood/sdk
-npm install && npm run build
-
-cd /opt/veya/mcp   # checkout of robinhood/hosted-mcp
-npm install && npm run build
+PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp
+VEYA_API_URL=https://api.veyanet.tech
 ```
 
-Copy `.env.example` → `.env` and edit secrets **on the server only**.
+Landing HTML already forces the canonical public MCP URL. Keep health `publicMcpUrl` the same.
 
-## Required production env
+---
+
+## 4. Install and build
+
+From npm:
+
+```bash
+npm install -g @veyanet/mcp
+veya-mcp
+```
+
+From this git checkout:
+
+```bash
+npm install
+npm run build
+npm test
+npm run smoke
+node dist/cli.js
+```
+
+Copy `.env.example` → `.env` on the **server only**. The CLI does not auto-load `.env`; export variables in systemd/docker.
+
+---
+
+## 5. Required production env
+
+Minimum for a **read-only public** host:
 
 ```bash
 NODE_ENV=production
-HOST=0.0.0.0
+HOST=127.0.0.1
 PORT=8788
 PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp
+VEYA_API_URL=https://api.veyanet.tech
 ROBINHOOD_CHAIN_ID=46630
 ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com
 ROBINHOOD_EXPLORER_URL=https://explorer.testnet.chain.robinhood.com
 VEYA_CONTRACT_ADDRESS=0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84
-VEYA_API_URL=https://api.veyanet.tech
+# Leave MCP_API_KEY and VEYA_RELAYER_PRIVATE_KEY empty
+```
+
+`HOST=127.0.0.1` is safer than `0.0.0.0` if the proxy sits on the same machine. Code default is `0.0.0.0` so Docker-style binds work; prefer loopback + proxy when you can.
+
+If this MCP process **is** on the API box and validators listen locally, you can leave fleet defaults. If not, set `VEYA_VALIDATOR_NODES` and `VEYA_SEALED_NODE_URL` to the private fleet URLs. See [CONFIGURATION.md](./CONFIGURATION.md).
+
+Optional browser CORS:
+
+```bash
 CORS_ORIGIN=https://veyanet.tech,https://www.veyanet.tech,https://app.veyanet.tech
 ```
 
-Optional writes:
+---
+
+## 6. Reverse proxy
+
+Requirements:
+
+1. TLS 1.2+ for `mcp.veyanet.tech`
+2. Forward `POST /mcp`, `GET /`, `GET /health` (and `/mcp/session` if you use it)
+3. Forward header `Authorization` (needed only if writes are on)
+4. Do not buffer SSE to death — Streamable HTTP may use `text/event-stream`. Disable proxy buffering for `/mcp` if clients hang.
+5. Reasonable body size ≥ 1 MB (Express cap is 1 MB anyway)
+
+Sketch (nginx concepts, not a copy-paste production file):
+
+- `proxy_pass` to `http://127.0.0.1:8788`
+- `proxy_http_version 1.1`
+- `proxy_set_header Authorization $http_authorization`
+- `proxy_buffering off` on `/mcp`
+
+HTTP/2 at the edge is fine if your client stack allows it; MCP clients vary.
+
+---
+
+## 7. Process manager
+
+Run under systemd, Docker, or similar:
+
+- Restart on crash
+- Do not log env that contains keys
+- `chmod 600` on `.env` if you use a file
+
+Docker: pass env with `--env-file` that is **not** in the image. Do not bake keys into layers.
+
+---
+
+## 8. Health and landing checks
+
+After deploy:
 
 ```bash
-MCP_API_KEY=<long-random-secret>
-VEYA_RELAYER_PRIVATE_KEY=0x...
+curl -sS https://mcp.veyanet.tech/health
+curl -sS -o /dev/null -w "%{http_code}\n" https://mcp.veyanet.tech/
+curl -sS https://api.veyanet.tech/health
 ```
 
-Leave write vars empty for a public read-only MCP (recommended default until you need agent writes).
+Require MCP health:
 
-## nginx
+- `service` = `@veyanet/mcp`
+- `chainId` = `46630`
+- `sealed` mentions `AES-256-GCM`
+- `writesEnabled` = `false` on the public host
+- `publicMcpUrl` = `https://mcp.veyanet.tech/mcp`
 
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name mcp.veyanet.tech;
-    ssl_certificate     /etc/letsencrypt/live/mcp.veyanet.tech/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/mcp.veyanet.tech/privkey.pem;
+Landing must tell humans to paste `https://mcp.veyanet.tech/mcp`.
 
-    location / {
-        proxy_pass http://127.0.0.1:8788;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Authorization $http_authorization;
-        proxy_buffering off;
-    }
-}
-```
+API health may be `degraded` if validators/sealed are down on the API host. MCP can still be `ok`.
 
-**Critical:** forward `Authorization` so Bearer write auth reaches Node. Disable response buffering for Streamable HTTP.
+Then connect a real MCP client and call `veya_describe` + `veya_ping_chain`. See [VERIFICATION.md](./VERIFICATION.md).
 
-## systemd unit (example)
+---
 
-```ini
-[Unit]
-Description=VEYA MCP
-After=network.target
+## 9. Writes: public vs private instance
 
-[Service]
-Type=simple
-WorkingDirectory=/opt/veya/mcp
-ExecStart=/usr/bin/node dist/cli.js
-EnvironmentFile=/opt/veya/mcp/.env
-Restart=always
-RestartSec=3
-User=veya
-Group=veya
+| Host | Writes |
+|------|--------|
+| `mcp.veyanet.tech` | **Off** (no `MCP_API_KEY`, no relayer in env) |
+| Private operator MCP | On, dedicated testnet wallet, IP allowlist / VPN |
 
-[Install]
-WantedBy=multi-user.target
-```
+Do not enable Bearer writes on the public URL “just to demo.” Guest proofs already go through the **product API** (`veya_anchor_proof`).
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now veya-mcp
-sudo systemctl status veya-mcp
-```
+---
 
-## Post-deploy checklist
+## 10. Fleet on the same machine
 
-- [ ] `curl -s https://mcp.veyanet.tech/health` → `status: ok`, `chainId: 46630`
-- [ ] Landing `/` shows paste URL `https://mcp.veyanet.tech/mcp`
-- [ ] Claude / Cursor can connect and call `veya_describe`
-- [ ] `veya_ping_chain` returns 46630
-- [ ] `veya_verify_transaction` works on a known tx
-- [ ] If writes disabled: `/health` has `writesEnabled: false`
-- [ ] If writes enabled: Bearer required; wrong Bearer fails
-- [ ] `.env` not in git; file mode restricted (`chmod 600`)
+If you colocated MCP with validators:
 
-## Rollback
+- Validators: `POST /execute` on `7701–7703`
+- Sealed: `POST /protected` on `7800`
+- Do not open those ports on the public firewall. Only Node on localhost should call them.
 
-1. `systemctl stop veya-mcp`
-2. Redeploy previous `dist/` + `.env`
-3. `systemctl start veya-mcp`
-4. Re-run health + `veya_ping_chain`
+Strangers never curl those ports.
 
-## Companion docs
+---
 
-* Tree: `robinhood/docs/phase2/MCP.md`
-* Ship board: `robinhood/docs/phase2/SHIP.md` §3b
+## 11. Secrets
+
+Never git:
+
+- `.env`
+- funded keys
+- `MCP_API_KEY`
+
+`.env.example` is the only template. See [SECURITY.md](../SECURITY.md).
+
+---
+
+## 12. Rollback
+
+Keep the previous `dist/` or npm version. This package has no database. Rollback = restart old binary + same env.
+
+Chain state is on Robinhood testnet and is **not** rolled back with MCP.
+
+Related: [NETWORK_PIN.md](./NETWORK_PIN.md), [QUICKSTART.md](./QUICKSTART.md).
