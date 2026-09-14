@@ -1,77 +1,586 @@
-# System Architecture — VEYA MCP
+# System Architecture — `@veyanet/mcp`
 
-## Purpose
+**Thin HTTP gate. Thick cryptography lives in `@veyanet/sdk`. Product rooms live on `https://api.veyanet.tech`.**
 
-`@veyanet/mcp` is a **thin Streamable HTTP gate** in front of `@veyanet/sdk`. It exists so agent clients can paste `https://mcp.veyanet.tech/mcp` and call selected VEYA capabilities without embedding the SDK. It is not a second cryptography stack and not a token service.
+This document explains how the MCP server is built, who talks to whom, and what a tool call actually does. Words stay simple. Details stay real.
 
-## Trust boundaries
+[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.1.0-cb3837?style=flat-edge)](../package.json)
+[![Robinhood Testnet](https://img.shields.io/badge/Testnet-Chain%20ID%2046630-blue?style=flat-edge)](https://explorer.testnet.chain.robinhood.com/address/0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84)
+[![Public MCP](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9?style=flat-edge)](https://mcp.veyanet.tech/mcp)
+
+**[Documentation Hub](./README.md)** • **[Tools](./TOOLS.md)** • **[Quickstart](./QUICKSTART.md)** • **[Network pin](./NETWORK_PIN.md)** • **[SDK bridge](./SDK_BRIDGE.md)**
+
+---
+
+## Table of contents
+
+1. [What this package is](#1-what-this-package-is)
+2. [Live public state](#2-live-public-state)
+3. [Who uses which path](#3-who-uses-which-path)
+4. [High-level picture](#4-high-level-picture)
+5. [Layered architecture](#5-layered-architecture)
+6. [Request lifecycle](#6-request-lifecycle)
+7. [Component inventory](#7-component-inventory)
+8. [How tools are grouped](#8-how-tools-are-grouped)
+9. [Trust boundaries](#9-trust-boundaries)
+10. [Secrets and write gating](#10-secrets-and-write-gating)
+11. [Fleet and sealed capacity](#11-fleet-and-sealed-capacity)
+12. [Product API vs MCP](#12-product-api-vs-mcp)
+13. [Storage: what lives where](#13-storage-what-lives-where)
+14. [Cryptographic profile](#14-cryptographic-profile)
+15. [Failure modes](#15-failure-modes)
+16. [Invariants](#16-invariants)
+17. [Glossary](#17-glossary)
+
+---
+
+## 1. What this package is
+
+`@veyanet/mcp` is a **Model Context Protocol** server. An MCP client (Claude, Cursor, or a custom agent) sends JSON-RPC over **Streamable HTTP**. The server turns those calls into:
+
+| Job | Who actually does the work |
+|-----|----------------------------|
+| Hash, ping chain, verify a tx, PQ sign/verify, on-chain reads, optional on-chain writes | `@veyanet/sdk` inside this Node process |
+| Guest login, rooms, agents, Use proofs, public registry | HTTPS to `https://api.veyanet.tech` |
+| 2-of-3 consensus and AES sealed execute | SDK HTTP client → fleet URLs configured on **this** MCP host (on production, those URLs belong to the product API machine, not your laptop) |
+
+Paste this URL into Claude or Cursor:
+
+```text
+https://mcp.veyanet.tech/mcp
+```
+
+Hashing, chain-id checks, and `Veya.sol` writes live in `@veyanet/sdk`. MCP registers tools and HTTP.
+
+Live product facts:
+
+| Topic | How it works today |
+|-------|-------------------|
+| Contract | `Veya.sol` is a protocol contract (commitments, environments, attestations). |
+| Sealed path | **AES-256-GCM** on sealed-node (software process boundary). |
+| Settlement | Robinhood **testnet 46630**. |
+| Sessions | Guest and wallet JWTs come from the **product API**. MCP forwards `sessionToken`. |
+| Transport | `veya-mcp` is an **HTTP** Streamable HTTP server. |
+| Quorum | Agreement is matching BLAKE3 hashes (2-of-3). Unreachable nodes return `consensus_reached: false`. |
+
+---
+
+## 2. Live public state
+
+| Field | Value |
+|-------|-------|
+| npm package | `@veyanet/mcp` **1.1.0** |
+| SDK it depends on | `@veyanet/sdk` **^1.2.0** |
+| Public connector | `https://mcp.veyanet.tech/mcp` |
+| Landing | `https://mcp.veyanet.tech/` |
+| MCP health | `https://mcp.veyanet.tech/health` |
+| Product API | `https://api.veyanet.tech` |
+| Chain | Robinhood Chain testnet, id **46630** (`0xb636`) |
+| Contract | `Veya.sol` at `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| RPC | `https://rpc.testnet.chain.robinhood.com` |
+| Explorer | `https://explorer.testnet.chain.robinhood.com` |
+| Default Node listen | `0.0.0.0:8788` (behind TLS on the public host) |
+
+A known testnet tx used in docs (sealed-execution commitment path):
+
+```text
+0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8
+```
+
+Product API `/health` may say **`degraded`** when validators/sealed are not running on the API host. That is an honest fleet report. MCP describe and chain ping can still work.
+
+---
+
+## 3. Who uses which path
+
+```mermaid
+flowchart LR
+  subgraph Stranger["Anyone with Claude / Cursor"]
+    Paste["Paste mcp.veyanet.tech/mcp"]
+  end
+  subgraph Dev["App / backend author"]
+    Npm["npm install @veyanet/sdk"]
+  end
+  subgraph Operator["Person who runs an MCP host"]
+    Env[".env on the server"]
+  end
+  Paste --> Public["Public reads + product tools"]
+  Npm --> InProcess["Crypto and chain in your process"]
+  Env --> SelfHost["Same package, your TLS, your keys"]
+```
+
+| Person | What they need |
+|--------|----------------|
+| Curious user | Public MCP URL. Optional: `veya_guest_login` for Use proofs. |
+| TypeScript integrator | `@veyanet/sdk` from npm. MCP is optional. |
+| Operator of `mcp.veyanet.tech` | This repo (or the npm binary), TLS, env pins, usually **writes off**. |
+| Operator who wants chain writes from MCP | Private MCP instance + `MCP_API_KEY` + funded testnet relayer key. |
+
+---
+
+## 4. High-level picture
+
+```mermaid
+flowchart TB
+  subgraph Client["MCP client"]
+    Agent["Claude / Cursor / custom agent"]
+  end
+
+  subgraph McpHost["@veyanet/mcp Node process"]
+    Http["Express: GET / GET /health POST /mcp"]
+    Auth["Bearer in AsyncLocalStorage"]
+    Tools["McpServer tool registry"]
+    ReadCli["createReadClient"]
+    WriteCli["createWriteClient"]
+    Api["apiRequest fetch"]
+  end
+
+  subgraph Sdk["@veyanet/sdk"]
+    PQ["ML-DSA / Kyber / BLAKE3"]
+    Evm["EvmAnchor + ping / verify"]
+    Cons["runConsensus"]
+    Seal["protectedExec"]
+    Mem["storeMemory ~/.veya"]
+  end
+
+  subgraph Outside["Outside this process"]
+    RPC["Robinhood RPC 46630"]
+    API["api.veyanet.tech"]
+    Val["Validators POST /execute"]
+    SN["Sealed-node POST /protected"]
+    Chain["Veya.sol"]
+  end
+
+  Agent -->|"HTTPS Streamable HTTP"| Http
+  Http --> Auth
+  Auth --> Tools
+  Tools --> ReadCli
+  Tools --> WriteCli
+  Tools --> Api
+  ReadCli --> Sdk
+  WriteCli --> Sdk
+  PQ --> Evm
+  Evm --> RPC
+  RPC --> Chain
+  Cons --> Val
+  Seal --> SN
+  Api --> API
+  Mem --> Disk["MCP machine disk"]
+```
+
+ASCII version of the same idea:
+
+```text
+MCP client (Claude / Cursor)
+        │  TLS  POST /mcp
+        ▼
+┌───────────────────────────────────────────┐
+│  @veyanet/mcp                             │
+│  owns: HTTP, tool list, Bearer gate       │
+│  does not own: crypto math, Veya.sol ABI  │
+└───────────┬─────────────────┬─────────────┘
+            │                 │
+            │ SDK             │ fetch
+            ▼                 ▼
+   Robinhood RPC      api.veyanet.tech
+   + local fleet URLs     rooms / guest / registry
+   (on the API host)      + API-owned validators
+```
+
+---
+
+## 5. Layered architecture
+
+Each layer only talks to the layer below it for its job. MCP does not re-implement BLAKE3.
+
+```
++------------------------------------------------------------------+
+| L5  Agent / IDE                                                  |
+|     Claude, Cursor, custom MCP client                            |
++--------------------------------+---------------------------------+
+                                 | Streamable HTTP JSON-RPC
++--------------------------------v---------------------------------+
+| L4  Transport                                                    |
+|     Express JSON body (1 MB cap), CORS, GET /, GET /health       |
+|     POST /mcp (stateless, one McpServer per request)             |
+|     POST /mcp/session (optional MCP-Session-Id map)              |
++--------------------------------+---------------------------------+
+                                 |
++--------------------------------v---------------------------------+
+| L3  Tool policy                                                  |
+|     registerPublic / crypto / fleet / registry / product / write |
+|     Bearer AsyncLocalStorage for writes                          |
+|     sessionToken forwarded to product API                        |
++--------------------------------+---------------------------------+
+                                 |
+          +----------------------+----------------------+
+          |                      |                      |
++---------v---------+  +---------v---------+  +--------v----------+
+| L2a SDK           |  | L2b Product HTTP  |  | L2c Fleet HTTP    |
+| VeyaClient, pq,   |  | api.veyanet.tech  |  | validators        |
+| EvmAnchor         |  | /v1 /public /auth |  | sealed-node       |
++---------+---------+  +---------+---------+  +--------+----------+
+          |                      |                      |
+          +----------------------+----------------------+
+                                 |
++--------------------------------v---------------------------------+
+| L1  Settlement                                                   |
+|     Veya.sol on Robinhood testnet 46630                          |
++------------------------------------------------------------------+
+```
+
+```mermaid
+flowchart TB
+  subgraph L5["L5 Agent"]
+    IDE["IDE / Claude"]
+  end
+  subgraph L4["L4 HTTP"]
+    EX["src/http.ts"]
+  end
+  subgraph L3["L3 Tools"]
+    SV["src/server.ts"]
+  end
+  subgraph L2["L2 Backends"]
+    SDK["@veyanet/sdk"]
+    API["Product API"]
+    FLEET["Validator + sealed"]
+  end
+  subgraph L1["L1 Chain"]
+    SOL["Veya.sol 46630"]
+  end
+  IDE --> EX --> SV
+  SV --> SDK
+  SV --> API
+  SV --> FLEET
+  SDK --> SOL
+```
+
+---
+
+## 6. Request lifecycle
+
+### 6.1 Public read tool (example: `veya_ping_chain`)
+
+```mermaid
+sequenceDiagram
+  participant C as MCP client
+  participant H as POST /mcp
+  participant T as Tool handler
+  participant S as VeyaClient
+  participant R as Robinhood RPC
+
+  C->>H: JSON-RPC tools/call veya_ping_chain
+  H->>H: extractBearer (ignored for this tool)
+  H->>T: new McpServer + handleRequest
+  T->>S: createReadClient(cfg)
+  S->>R: eth_chainId / block / contract
+  R-->>S: ping fields
+  S-->>T: JSON
+  T-->>C: content[0].text string (JSON)
+```
+
+No API key. No guest JWT. If RPC is down, the tool returns an error JSON (`isError: true` for SDK-backed tools that use `toolError`).
+
+### 6.2 Product session tool (example: `veya_list_environments`)
+
+1. Client already called `veya_guest_login` (or has a wallet JWT from the product console).
+2. Client passes `sessionToken` as a **tool argument**, not as the MCP HTTP Bearer.
+3. `apiRequest` sets `Authorization: Bearer <sessionToken>` toward `VEYA_API_URL`.
+4. Guest Build routes (`veya_create_environment`, deploy, protected exec) still get **HTTP 403** from the API. MCP does not override that.
+
+MCP HTTP Bearer (`MCP_API_KEY`) and product `sessionToken` are **two different keys**. Mixing them up is a common operator mistake.
+
+### 6.3 Write tool (example: `veya_store_commitment`)
+
+Only exists if `writesEnabled(cfg)` is true (`MCP_API_KEY` **and** relayer/deployer private key).
+
+```mermaid
+sequenceDiagram
+  participant C as Authorized client
+  participant H as POST /mcp + Authorization
+  participant W as write tool
+  participant A as assertWriteAuthorized
+  participant E as EvmAnchor
+  participant R as Robinhood RPC
+
+  C->>H: Bearer MCP_API_KEY
+  H->>W: bearer from AsyncLocalStorage
+  W->>A: key match + relayer present
+  A-->>W: throw if mismatch
+  W->>E: storeCommitment(uuid16, digest32)
+  E->>E: ensureRobinhoodChain 46630
+  E->>R: signed tx
+  R-->>C: txHash + explorer URL
+```
+
+Public `mcp.veyanet.tech` should keep writes **off**. Then this tool is not registered; `veya_writes_status` is registered instead.
+
+### 6.4 Stateless vs session HTTP
+
+| Path | Behavior |
+|------|----------|
+| `POST /mcp` | **Stateless.** New `McpServer` + Streamable HTTP transport per request. This is the public paste URL. |
+| `POST /mcp/session` | Optional. Keeps transports in a `Map` keyed by `mcp-session-id`. Used if a client sends session ids. |
+
+Landing `GET /` always advertises `https://mcp.veyanet.tech/mcp` (`CANONICAL_PUBLIC_MCP_URL`), even if the process is listening on another host. That is intentional so production never tells people to paste loopback.
+
+---
+
+## 7. Component inventory
+
+Source of truth is this repo’s `src/` tree.
+
+| File | What it does in plain words |
+|------|-----------------------------|
+| `src/cli.ts` | Starts the HTTP server (`veya-mcp` binary). |
+| `src/index.ts` | Public Node exports: config, `createMcpServer`, `createHttpApp`. |
+| `src/config.ts` | Reads env, default pins, `writesEnabled`. |
+| `src/http.ts` | Express app, CORS, health, `/mcp`, `/mcp/session`, landing HTML. |
+| `src/landingPage.ts` | HTML for `GET /`. Always shows the public paste URL. |
+| `src/server.ts` | Builds `McpServer`, registers all tool groups. |
+| `src/auth.ts` | Parse `Authorization: Bearer`, fail-closed write assert. |
+| `src/sdk.ts` | `VeyaClient` factories + hex → bytes helper. |
+| `src/api.ts` | `fetch` wrapper to the product API + JSON tool replies. |
+| `src/tools/public.ts` | Describe, ping, hash, verify tx, API health. |
+| `src/tools/crypto.ts` | PQ keygen / sign / verify. |
+| `src/tools/fleet.ts` | Consensus, sealed, Boundnet in-process, local memory, PQ fingerprint. |
+| `src/tools/registry.ts` | Public API explorer + on-chain `eth_call` reads. |
+| `src/tools/product.ts` | Guest/session product API tools. |
+| `src/tools/write.ts` | On-chain writes **or** `veya_writes_status`. |
+
+Health JSON (`GET /health`) includes: `status`, `service` (`@veyanet/mcp`), `version`, `publicMcpUrl`, `chainId`, `contractAddress`, `writesEnabled`, `sealed` (`AES-256-GCM`), `settlement` (`Robinhood Chain testnet 46630`). Keys stay off this payload.
+
+---
+
+## 8. How tools are grouped
+
+Full argument lists: [TOOLS.md](./TOOLS.md).
+
+```mermaid
+flowchart TB
+  S["createMcpServer"]
+  S --> P["public.ts"]
+  S --> C["crypto.ts"]
+  S --> F["fleet.ts"]
+  S --> R["registry.ts"]
+  S --> PR["product.ts"]
+  S --> W["write.ts"]
+  P --> RPC["Robinhood RPC"]
+  C --> PQ["SDK pq"]
+  F --> VAL["validators / sealed / ~/.veya"]
+  R --> API["/public/*"]
+  R --> RPC
+  PR --> API
+  W --> CHAIN["Veya.sol writes"]
+```
+
+| Group | Auth on the MCP tool | Typical backend |
+|-------|----------------------|-----------------|
+| Public honesty | None | SDK + `GET {api}/health` |
+| Crypto | None | SDK in this process |
+| Fleet | None on MCP (fleet may still be unreachable) | SDK HTTP to configured node URLs |
+| Registry | None | Product `/public/*` or SDK `eth_call` |
+| Product | `sessionToken` argument | Product `/auth`, `/v1`, `/api/verify` |
+| Writes | HTTP Bearer `MCP_API_KEY` | SDK `EvmAnchor` + relayer |
+
+Approximate count: **~43** tools with writes off, **~47** with writes on (`veya_writes_status` replaced by five write tools).
+
+---
+
+## 9. Trust boundaries
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  MCP Client (Claude / Cursor / custom agent)                │
-│  Trusts: TLS to mcp.veyanet.tech, tool JSON responses       │
-│  Does not receive: relayer private keys, MCP_API_KEY dump   │
+│  MCP Client                                                 │
+│  Trusts: TLS to mcp.veyanet.tech, JSON tool text            │
+│  Does not get: relayer key, MCP_API_KEY, validator ports    │
 └────────────────────────────┬────────────────────────────────┘
-                             │ HTTPS Streamable HTTP
+                             │ HTTPS
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  @veyanet/mcp process                                       │
-│  Owns: POST /mcp, /health, tool registry, Bearer check      │
-│  Does not own: PQ primitives, consensus quorum, sealed AES  │
-└────────────────────────────┬────────────────────────────────┘
-                             │ in-process import
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│  @veyanet/sdk                                               │
-│  Owns: BLAKE3, verify receipts, EvmAnchor, chain id guard   │
-└────────────────────────────┬────────────────────────────────┘
-                             │ JSON-RPC
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Robinhood Chain testnet 46630 · Veya.sol                   │
-│  Owns: commitments, environments, attestations (protocol)   │
-└─────────────────────────────────────────────────────────────┘
-
-Optional side call:
-  veya_api_health → https://api.veyanet.tech/health
-  (product API fleet honesty; independent of MCP process uptime)
+│  MCP host                                                   │
+│  Trusts: @veyanet/sdk, Robinhood RPC, product API TLS       │
+│  Holds (if writes on): MCP_API_KEY, relayer secp256k1       │
+│  May reach: 127.0.0.1:7701–7703 and :7800 IF it shares a    │
+│  machine with the fleet (typical on the API host)           │
+└───────────────┬─────────────────────────────┬───────────────┘
+                │                             │
+                ▼                             ▼
+        Robinhood testnet              api.veyanet.tech
+        (public RPC)                   (rooms, guest, registry)
 ```
 
-## Components inside this package
+### What a stranger can believe after `veya_verify_transaction`
 
-| Module | Role |
-|--------|------|
-| `src/http.ts` | Express app: `/`, `/health`, `POST /mcp`, optional session path |
-| `src/server.ts` | `McpServer` construction + tool registration |
-| `src/config.ts` | Env load, defaults, `writesEnabled` |
-| `src/auth.ts` | Bearer extract + write assert |
-| `src/sdk.ts` | Read/write `VeyaClient` factories |
-| `src/tools/public.ts` | Public tools |
-| `src/tools/write.ts` | Authenticated write tools |
-| `scripts/smoke.ts` | Live initialize + tool smoke |
+- A receipt exists on chain 46630.
+- Parsed `Veya.sol` events match what the SDK decoder says.
 
-## What this architecture refuses
+They still cannot treat that as “FHE ran” or “mainnet settled.”
 
-* Inventing 2-of-3 quorum inside MCP without validators
-* Claiming FHE / SGX / Nitro as the sealed product path
-* Claiming mainnet settlement before Phase 3
-* Exposing write tools without both API key and relayer key
-* Treating `Veya.sol` as ERC-20
+### What guest JWT proves
 
-## Relationship to stdio MCP
+- The product API issued a **Use-only** session (`POST /auth/guest`).
+- It does **not** prove the caller owns a unique wallet.
+- Build stays 403.
 
-`veya-anchor/packages/mcp/` is a **local stdio** operator surface. `@veyanet/mcp` is the **HTTP** public surface. Both should stay honest about the same chain pins; they are not nested packages.
+### Default loopback URLs (operators only)
 
-## Failure domains
+`loadConfig()` defaults validators to `http://127.0.0.1:7701,7702,7703` and sealed to `http://127.0.0.1:7800`. That is so an MCP process **on the same host as the fleet** can reach it without extra env. It is **not** the stranger paste URL. Never put those loopback addresses in landing copy as “how to connect.”
 
-| Domain | Symptom | Operator action |
-|--------|---------|-----------------|
-| MCP process down | Connector timeout | Restart Node / systemd |
-| RPC down | `veya_ping_chain` / verify fail | Check Robinhood RPC |
-| Product API degraded | `veya_api_health` body degraded | Fleet / SHIP.md — MCP can still serve describe/ping if RPC works |
-| Wrong Bearer | Write tool error | Rotate / fix `MCP_API_KEY` |
-| Chain mismatch | SDK `CHAIN_MISMATCH` on writes | Fix RPC / chain id env |
+---
 
-## Security notes
+## 10. Secrets and write gating
 
-See [AUTHENTICATION.md](./AUTHENTICATION.md) and [../SECURITY.md](../SECURITY.md). Relayer keys are high value: use a dedicated testnet wallet, minimal ETH, and rotate if leaked.
+```mermaid
+flowchart TD
+  K1{"MCP_API_KEY set?"}
+  K2{"Relayer or deployer key set?"}
+  K1 -->|no| Off["writesEnabled = false"]
+  K2 -->|no| Off
+  K1 -->|yes| K2
+  K2 -->|yes| On["Register five write tools"]
+  Off --> Status["Register veya_writes_status"]
+  On --> Call{"Bearer equals MCP_API_KEY?"}
+  Call -->|no| Fail["Tool throws Unauthorized"]
+  Call -->|yes| Tx["EvmAnchor send tx"]
+```
+
+Bearer compare in `assertWriteAuthorized` is ordinary string equality (not a constant-time compare). Treat the key as high-entropy and rotate if leaked. Relayer key must never appear in tool JSON, `/health`, or logs.
+
+Product `sessionToken` is **not** `MCP_API_KEY`.
+
+Details: [AUTHENTICATION.md](./AUTHENTICATION.md).
+
+---
+
+## 11. Fleet and sealed capacity
+
+Consensus and sealed-node are separate processes the **product API** (or a self-host operator) runs. They are outside the MCP npm tarball.
+
+| Piece | HTTP | What “success” means |
+|-------|------|----------------------|
+| Validator | `POST /execute` | Node returns a BLAKE3 hash + ML-DSA sig of the payload |
+| Quorum in SDK | — | At least **2 of 3** hashes **match**. No match → `consensus_reached: false` |
+| Sealed-node | `POST /protected` | AES-256-GCM seal; MCP runs `requireVerifiedSeal` so `verified: false` cannot look like success |
+
+If the MCP host’s `VEYA_VALIDATOR_NODES` still point at empty loopback, `veya_run_consensus` fails or reports no quorum.
+
+Boundnet tools `veya_set_tool_policy` / `veya_route_message` use the **SDK in-process map**. Restarting MCP clears it. Hosted room policy is a **different** table on the product API (`veya_boundnet_invoke`).
+
+Local memory tools write `~/.veya` on the **MCP machine**. That is not the console “My proofs” list.
+
+---
+
+## 12. Product API vs MCP
+
+| Need | Use |
+|------|-----|
+| Agent paste URL | MCP |
+| Human product console | `https://app.veyanet.tech` (product, not this package) |
+| Guest stamp a text proof | MCP `veya_anchor_proof` **or** the console — both hit the API |
+| TypeScript in your process | `@veyanet/sdk` |
+| Create a Build room | Wallet session on the **API**, not guest |
+
+MCP `apiRequest` timeout is **20 seconds**. `veya_api_health` uses **8 seconds**.
+
+Guest is a **shared demo Use path**. It is not the official token-customer story.
+
+---
+
+## 13. Storage: what lives where
+
+| Data | Where |
+|------|-------|
+| Tool registry | RAM, rebuilt every `POST /mcp` (stateless) |
+| Optional MCP session transports | RAM `Map` on `/mcp/session` only |
+| In-process Boundnet allow list | RAM in this Node process |
+| Local agent memory | `~/.veya` on the MCP host |
+| Guest proofs, rooms, public agents | Product API database |
+| Commitments, environments, attestations | `Veya.sol` mappings on chain 46630 |
+| Relayer key | Server env only |
+
+Nothing in MCP persists guest JWTs.
+
+---
+
+## 14. Cryptographic profile
+
+MCP does not pick algorithms. It calls the SDK.
+
+| Primitive | Use in this stack |
+|-----------|-------------------|
+| BLAKE3-256 | Commitments, memory integrity, pubkey fingerprint |
+| ML-DSA-44 (FIPS 204) | Agent/operator identity, validator signatures, secure-message sign |
+| Kyber-768 (FIPS 203) | `veya_route_secure_message` session wrap |
+| AES-256-GCM | Sealed-node payload seal (**not** FHE) |
+| secp256k1 | Relayer `msg.sender` for `Veya.sol` gas (classical EVM) |
+
+On-chain ML-DSA **verify** is not done inside the EVM. The chain stores hashes and optional signature bytes. Auditors verify with the SDK.
+
+---
+
+## 15. Failure modes
+
+| What broke | What you see | What to do |
+|------------|--------------|------------|
+| MCP host down | Connector timeout | `curl https://mcp.veyanet.tech/health` |
+| Robinhood RPC down | `veya_ping_chain` / verify fail | Check public RPC |
+| Product API down | Guest, registry, proofs fail | `veya_api_health` |
+| Product API `degraded` | Health body says validators/sealed unreachable | Fleet on the **API** host — MCP describe can still work |
+| Validators down | `consensus_reached: false` or tool error | Do not treat as success |
+| Sealed down | `veya_sealed_execute` / protected exec error | Fail closed |
+| Guest + Build tool | API **403** | Use a wallet session |
+| Writes disabled | `veya_writes_status` | Expected on public MCP |
+| Wrong Bearer | Write tool error | Key mismatch |
+| Wrong chain id | SDK `CHAIN_MISMATCH` on writes | Pins must stay 46630 |
+
+JSON body over **1 MB** is rejected by Express.
+
+CORS: empty `CORS_ORIGIN` rejects **browser** `Origin` headers. Connectors with **no** Origin still work. That is why Claude/Cursor can call the public URL without a CORS allowlist.
+
+---
+
+## 16. Invariants
+
+These must stay true in code and docs:
+
+1. Public paste URL is `https://mcp.veyanet.tech/mcp`.
+2. Settlement chain id is **46630** unless an operator deliberately self-hosts a different pin (then they must not call it “VEYA production”).
+3. Sealed is **AES-256-GCM**.
+4. `Veya.sol` is a protocol contract.
+5. Writes require **both** API key and relayer key, then Bearer match.
+6. Guest Build is **403**.
+7. Unreachable quorum reports `consensus_reached: false`.
+8. `/health` and `veya_describe` stay honest about testnet and sealed.
+9. Keep `.env` and funded keys off git.
+10. MCP uses `@veyanet/sdk` for crypto and chain writes.
+
+---
+
+## 17. Glossary
+
+| Term | Meaning here |
+|------|----------------|
+| MCP | Model Context Protocol — JSON-RPC tools for agents |
+| Streamable HTTP | MCP over `POST` + JSON or SSE, not stdio |
+| Honesty card | `veya_describe` JSON (and `/health`) stating what is live |
+| Product API | Hosted HTTP at `api.veyanet.tech` (rooms, guest, registry) |
+| Fleet | Validator nodes + sealed-node owned by that API (or a self-host operator) |
+| Boundnet | Deny-by-default tool routing between agents |
+| Use | Guest-allowed product path (list/stamp proofs) |
+| Build | Create rooms, deploy agents, protected exec — wallet, not guest |
+| Relayer | secp256k1 key that pays testnet gas for `Veya.sol` writes |
+| Commitment | 32-byte digest stored on chain |
+| Fail closed | Error or `false` instead of a fake success |
+
+## Related docs
+
+- [TOOLS.md](./TOOLS.md) — every tool in simple words  
+- [TRANSPORT.md](./TRANSPORT.md) — HTTP endpoints and headers  
+- [AUTHENTICATION.md](./AUTHENTICATION.md) — Bearer vs session  
+- [CONFIGURATION.md](./CONFIGURATION.md) — env vars  
+- [DEPLOYMENT.md](./DEPLOYMENT.md) — TLS host  
+- [SDK_BRIDGE.md](./SDK_BRIDGE.md) — exact SDK imports  
+- [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
+- [VERIFICATION.md](./VERIFICATION.md) — how to prove it  
+- [QUICKSTART.md](./QUICKSTART.md) — first five minutes  
