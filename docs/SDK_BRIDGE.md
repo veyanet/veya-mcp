@@ -1,67 +1,169 @@
-# SDK Bridge — VEYA MCP ↔ `@veyanet/sdk`
+# SDK Bridge — `@veyanet/mcp` ↔ `@veyanet/sdk`
 
-This document lists exactly what `@veyanet/mcp` imports from `@veyanet/sdk` and what it deliberately does not re-implement.
+This MCP server **imports** `@veyanet/sdk` for hashing, PQ crypto, receipt parsing, and `Veya.sol` writes. Product rooms go through `fetch` to the product API.
 
-## Dependency
+Strangers install packages from npm only:
+
+```bash
+npm install @veyanet/sdk
+# Agent paste URL (no install):
+# https://mcp.veyanet.tech/mcp
+```
+
+**[Architecture](./ARCHITECTURE.md)** • **[Tools](./TOOLS.md)** • **[Configuration](./CONFIGURATION.md)**
+
+---
+
+## Table of contents
+
+1. [Why two packages](#1-why-two-packages)
+2. [Declared dependency](#2-declared-dependency)
+3. [Factories in `src/sdk.ts`](#3-factories-in-srcsdkts)
+4. [Named SDK exports](#4-named-sdk-exports)
+5. [Tool → backend map](#5-tool--backend-map)
+6. [Hex helpers](#6-hex-helpers)
+7. [Product API HTTP client](#7-product-api-http-client)
+8. [Version skew](#8-version-skew)
+9. [When to use the SDK in your process](#9-when-to-use-the-sdk-in-your-process)
+
+---
+
+## 1. Why two packages
+
+| Package | Job |
+|---------|-----|
+| `@veyanet/sdk` | Crypto, chain-id guard, consensus client, sealed client, `EvmAnchor` |
+| `@veyanet/mcp` | Streamable HTTP, tool names, Bearer write gate, honesty card, forwarding to `api.veyanet.tech` |
+
+Agents should not embed a relayer key in an IDE plugin. MCP can hold that key on a **private** host. App servers that want full control import the SDK and never run MCP.
+
+The hosted product API also imports the SDK. Same pins: chain **46630**, `Veya.sol` `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`.
+
+---
+
+## 2. Declared dependency
+
+From this package’s `package.json`:
 
 ```json
-"@veyanet/sdk": "file:../sdk"
+"@veyanet/sdk": "^1.2.0"
 ```
 
-Build the SDK before installing MCP:
+MCP version is **1.1.0**. SDK version is **1.2.0** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**, not from a sibling `../sdk` folder.
 
-```bash
-cd ../sdk && npm install && npm run build
-cd ../hosted-mcp && npm install
+---
+
+## 3. Factories in `src/sdk.ts`
+
+### `createReadClient(cfg)`
+
+```ts
+new VeyaClient({
+  rpcUrl: cfg.rpcUrl,
+  contractAddress: cfg.contractAddress,
+  chainId: cfg.chainId,
+  explorerUrl: cfg.explorerUrl,
+  validatorNodes: cfg.validatorNodes,
+  sealedNodeUrl: cfg.sealedNodeUrl,
+})
 ```
 
-## Factories (`src/sdk.ts`)
+No `payerPrivateKey`. Used for ping, hash, verify, on-chain reads, `runConsensus` via the client, PQ keygen.
 
-| Helper | SDK usage |
-|--------|-----------|
-| `createReadClient(cfg)` | `new VeyaClient({ rpcUrl, contractAddress, chainId, explorerUrl })` — no payer |
-| `createWriteClient(cfg)` | same + `payerPrivateKey: cfg.relayerPrivateKey` |
-| `parseHexBytes` | local helper (not SDK) for tool hex args |
+### `createWriteClient(cfg)`
 
-## Public tools → SDK methods
+Same fields plus `payerPrivateKey: cfg.relayerPrivateKey`. Throws if the relayer key is missing.
 
-| MCP tool | SDK call |
-|----------|----------|
-| `veya_describe` | none (config honesty JSON) |
-| `veya_ping_chain` | `client.pingChain()`, `client.describe()` |
-| `veya_hash_blake3` | `client.hashBlake3(data)` |
-| `veya_verify_transaction` | `client.verifyTransaction(txHash)` |
-| `veya_api_health` | `fetch(apiUrl/health)` — not SDK |
+Used only by write tools after Bearer auth.
 
-## Write tools → SDK methods
+---
 
-| MCP tool | SDK call |
-|----------|----------|
-| `veya_store_commitment` | `client.requireEvm().storeCommitment(uuid16, commitment32)` |
-| `veya_attest_execution` | `client.requireEvm().attestExecution(...)` |
-| `veya_register_environment` | `client.requireEvm().registerEnvironment(...)` |
+## 4. Named SDK exports
 
-`EvmAnchor` enforces `ensureRobinhoodChain()` before submit.
+`src/tools/crypto.ts` and `src/tools/fleet.ts` also import named SDK exports:
 
-## Not exposed via MCP (use SDK or product API)
+| Import | Used by |
+|--------|---------|
+| `pq` | sign/verify UTF-8, `publicKeyHashBlake3` |
+| `runConsensus` | `veya_run_consensus` |
+| `protectedExec` + `requireVerifiedSeal` | `veya_sealed_execute` |
+| `setToolPolicy` | `veya_set_tool_policy` |
+| `routeMessage` | `veya_route_message` |
+| `routeSecureMessage` | `veya_route_secure_message` |
+| `verifySecureMessage` | `veya_verify_secure_message` |
+| `storeMemory` / `readMemory` / `invalidateMemory` | local `~/.veya` tools |
 
-* `runConsensus` / validator fleet orchestration
-* `protectedExecute` / sealed-node AES session
-* Kyber session establishment
-* In-memory `recordLocalSpend` ledger
-* Full product guest/wallet JWT auth
-* `initSpendingLimit` / `recordSpend` / `flagMemoryNullifier` (backend request path; not currently MCP tools)
+In-process Boundnet and `~/.veya` memory live in the **MCP Node process**, not in the product database.
 
-If you need those, import `@veyanet/sdk` in your own process or use the product API — do not assume MCP mirrors the entire SDK surface.
+---
 
-## Version alignment
+## 5. Tool → backend map
 
-MCP honesty and docs assume SDK **1.2.x** honesty (`SDK_SURFACE`: AES-256-GCM, not FHE, testnet 46630). After upgrading the SDK, re-run:
-
-```bash
-npm run lint && npm test && npm run smoke
+```mermaid
+flowchart TB
+  Tools["MCP tools"]
+  Tools --> SDK["@veyanet/sdk"]
+  Tools --> API["fetch api.veyanet.tech"]
+  SDK --> RPC["Robinhood JSON-RPC"]
+  SDK --> VAL["POST /execute"]
+  SDK --> SEAL["POST /protected"]
+  SDK --> DISK["~/.veya"]
+  API --> PG["Product DB / relayer"]
 ```
 
-## Why a bridge exists
+| Area | Backend |
+|------|---------|
+| Ping, verify tx, BLAKE3, `commitmentExists`, read environment/agent | SDK → Robinhood RPC |
+| PQ keygen/sign/verify/fingerprint | SDK `pq` in this process |
+| Consensus / sealed | SDK HTTP to `cfg.validatorNodes` / `cfg.sealedNodeUrl` |
+| Public stats, agents, certificates, executions | `GET {api}/public/...` |
+| Guest, rooms, agents, proofs, Boundnet invoke, protected exec | `{api}/auth`, `{api}/v1/...` |
+| Proof verify | `{api}/api/verify/:signature` |
+| On-chain writes | SDK `EvmAnchor` when Bearer + relayer configured |
 
-Agents should not embed relayer keys. MCP lets them call read/verify tools over HTTPS. Operators who need full cryptographic control stay on the SDK.
+Exact tool names: [TOOLS.md](./TOOLS.md).
+
+---
+
+## 6. Hex helpers
+
+`parseHexBytes(value, expectedLen?)` in `src/sdk.ts`:
+
+- Strips `0x`
+- Requires even-length hex
+- Optional exact byte length (16 for environment/agent UUID, 32 for digests)
+
+Write and registry tools use this so a 15-byte UUID cannot silently pad.
+
+Crypto/fleet tools have a local `hexToBytes` with the same even-length rule.
+
+---
+
+## 7. Product API HTTP client
+
+MCP `src/api.ts` `apiRequest`:
+
+- Timeout 20 s
+- Optional JSON body
+- Optional `Authorization: Bearer <sessionToken>`
+- Returns `{ httpStatus, body }` even for 403 (so guest Build failures stay visible)
+
+That path never constructs `VeyaClient`. The API server, elsewhere, uses the SDK for its own relayer.
+
+---
+
+## 8. Version skew
+
+If MCP health says one contract address and `npm view @veyanet/sdk` docs say another, treat it as a **bug**. Pins must match [NETWORK_PIN.md](./NETWORK_PIN.md).
+
+SDK chain-id guard still applies on writes even if MCP env is wrong: a lying RPC that is not 46630 should refuse send.
+
+---
+
+## 9. When to use the SDK in your process
+
+Use `@veyanet/sdk` in your own Node process when you want crypto and chain calls in-process.
+
+Use MCP when an agent runtime should call VEYA over the paste URL, with the public honesty card.
+
+Related SDK docs live in the SDK repo: architecture, post-quantum, sealed execution. This file only explains the **bridge**.
