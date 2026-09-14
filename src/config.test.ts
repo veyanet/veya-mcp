@@ -41,4 +41,25 @@ describe("veyanet mcp http", () => {
       );
     }
   });
+
+  it("GET / always advertises public paste URL", async () => {
+    const cfg = loadConfig();
+    cfg.publicMcpUrl = "http://127.0.0.1:9999/mcp";
+    const app = createHttpApp(cfg);
+    const server = app.listen(0);
+    try {
+      const addr = server.address();
+      assert.ok(addr && typeof addr === "object");
+      const res = await fetch(`http://127.0.0.1:${addr.port}/`);
+      assert.equal(res.status, 200);
+      const html = await res.text();
+      assert.match(html, /https:\/\/mcp\.veyanet\.tech\/mcp/);
+      assert.match(html, /VEYA/);
+      assert.ok(!html.includes("http://127.0.0.1:9999/mcp"));
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve())),
+      );
+    }
+  });
 });
