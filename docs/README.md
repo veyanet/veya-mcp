@@ -1,54 +1,72 @@
-# VEYA MCP — Documentation Hub
+# Documentation Hub — `@veyanet/mcp`
 
-This directory is the documentation set for `@veyanet/mcp`, the Streamable HTTP Model Context Protocol server for VEYA on Robinhood Chain. The root [README.md](../README.md) is the publish-facing entry (same role as `@veyanet/sdk`’s README). Use the table below for depth.
+This folder is the documentation set for `@veyanet/mcp`, the Streamable HTTP Model Context Protocol server for VEYA on Robinhood Chain testnet **46630**.
+
+The root [README.md](../README.md) is the publish-facing intro. **CHANGELOG.md** at the repo root is the version history (leave that file as the source of releases). This hub is how a stranger learns **how the server is built** and **what each tool does**.
+
+---
+
+## Start here
+
+1. Paste `https://mcp.veyanet.tech/mcp` into Claude or Cursor (Streamable HTTP).
+2. Read [QUICKSTART.md](./QUICKSTART.md) and run `veya_describe` → `veya_ping_chain`.
+3. Confirm pins in [NETWORK_PIN.md](./NETWORK_PIN.md).
+4. Look up any tool in [TOOLS.md](./TOOLS.md).
+5. For pictures of trust and layers, read [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+You need **public MCP**, optionally **`@veyanet/sdk`**, and the **product API** at `https://api.veyanet.tech`.
+
+---
 
 ## Reading paths
 
-### Stranger / agent client
-1. [QUICKSTART.md](./QUICKSTART.md) — paste `https://mcp.veyanet.tech/mcp`
-2. [TOOLS.md](./TOOLS.md) — what each `veya_*` tool does
-3. [NETWORK_PIN.md](./NETWORK_PIN.md) — chain id, contract, explorer
-4. [VERIFICATION.md](./VERIFICATION.md) — prove a commitment without trusting UI screenshots
+| If you want to… | Read |
+|-----------------|------|
+| Connect in five minutes | [QUICKSTART.md](./QUICKSTART.md) |
+| Know chain id, contract, public URLs | [NETWORK_PIN.md](./NETWORK_PIN.md) |
+| Understand **every tool** (what it does, args, returns) | [TOOLS.md](./TOOLS.md) |
+| See layers, sequence charts, trust, failures | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Know HTTP paths, SSE, CORS, stateless `/mcp` | [TRANSPORT.md](./TRANSPORT.md) |
+| Know Bearer vs guest JWT vs relayer key | [AUTHENTICATION.md](./AUTHENTICATION.md) |
+| Self-host env vars | [CONFIGURATION.md](./CONFIGURATION.md) |
+| Put TLS in front of Node | [DEPLOYMENT.md](./DEPLOYMENT.md) |
+| Prove it as an auditor | [VERIFICATION.md](./VERIFICATION.md) |
+| See what is SDK vs API | [SDK_BRIDGE.md](./SDK_BRIDGE.md) |
+| Contribute a tool | [../CONTRIBUTING.md](../CONTRIBUTING.md) |
+| Report a security bug | [../SECURITY.md](../SECURITY.md) |
 
-### Operator / deployer
-1. [DEPLOYMENT.md](./DEPLOYMENT.md) — TLS, nginx, systemd, env
-2. [CONFIGURATION.md](./CONFIGURATION.md) — every environment variable
-3. [AUTHENTICATION.md](./AUTHENTICATION.md) — Bearer write gate
-4. [TRANSPORT.md](./TRANSPORT.md) — Streamable HTTP details
+```mermaid
+flowchart TB
+  Q["QUICKSTART"] --> T["TOOLS"]
+  Q --> N["NETWORK_PIN"]
+  T --> A["ARCHITECTURE"]
+  A --> X["TRANSPORT / AUTH"]
+  X --> C["CONFIGURATION / DEPLOYMENT"]
+  A --> S["SDK_BRIDGE"]
+  N --> V["VERIFICATION"]
+```
 
-### Integrator / security reviewer
-1. [ARCHITECTURE.md](./ARCHITECTURE.md) — trust boundaries
-2. [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what MCP calls in `@veyanet/sdk`
-3. [../SECURITY.md](../SECURITY.md) — disclosure
+---
 
-## Package identity
+## Package facts
 
 | Item | Value |
 |------|-------|
-| npm / service name | `@veyanet/mcp` |
-| Monorepo directory | `robinhood/hosted-mcp/` |
-| Public URL | `https://mcp.veyanet.tech/mcp` |
-| Sibling SDK | `robinhood/sdk` (`@veyanet/sdk`) |
-| Stdio MCP (operators) | `veya-anchor/packages/mcp/` |
+| npm | `@veyanet/mcp` **1.1.0** |
+| SDK | `@veyanet/sdk` **^1.2.0** |
+| Public connector | `https://mcp.veyanet.tech/mcp` |
+| Product API | `https://api.veyanet.tech` |
+| Chain | Robinhood testnet **46630** |
+| Contract | `Veya.sol` `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| Sealed | AES-256-GCM |
+| Writes on public host | Usually **off** |
 
-## Honesty (always)
+---
 
-* Settlement today: Robinhood Chain **testnet** chain id **46630**
-* Protocol contract: `Veya.sol` (not an ERC-20)
-* Sealed execution elsewhere: **AES-256-GCM** (not FHE; not SGX/Nitro product path)
-* Mainnet: Phase 3 — not a current VEYA settlement claim
+## Live facts
 
-## Catalog
-
-| Document | Description |
-|----------|-------------|
-| [NETWORK_PIN.md](./NETWORK_PIN.md) | Network constants and pins |
-| [QUICKSTART.md](./QUICKSTART.md) | First connect and first tools |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Trust model and component map |
-| [TOOLS.md](./TOOLS.md) | Full tool reference |
-| [VERIFICATION.md](./VERIFICATION.md) | Audit / stranger verify flow |
-| [DEPLOYMENT.md](./DEPLOYMENT.md) | Production deploy for `mcp.veyanet.tech` |
-| [CONFIGURATION.md](./CONFIGURATION.md) | Environment variable reference |
-| [TRANSPORT.md](./TRANSPORT.md) | HTTP / MCP transport |
-| [AUTHENTICATION.md](./AUTHENTICATION.md) | Write auth and key custody |
-| [SDK_BRIDGE.md](./SDK_BRIDGE.md) | SDK methods used by tools |
+- `Veya.sol` is a protocol contract (environments, agents, commitments, attestations).
+- Settlement is Robinhood **testnet 46630**.
+- Guest sessions are **Use-only** (Build returns API **403**).
+- Quorum is matching BLAKE3 hashes (2-of-3); unreachable nodes return `consensus_reached: false`.
+- Public paste URL is `https://mcp.veyanet.tech/mcp`.
