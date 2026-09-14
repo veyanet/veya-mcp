@@ -61,7 +61,7 @@ async function main() {
     });
     assert.equal(listed.status, 200, listed.raw.slice(0, 400));
     const tools = listed.json?.result?.tools as Array<{ name: string }> | undefined;
-    assert.ok(Array.isArray(tools) && tools.length >= 4, `tools/list: ${listed.raw.slice(0, 800)}`);
+    assert.ok(Array.isArray(tools) && tools.length >= 30, `tools/list: ${listed.raw.slice(0, 800)}`);
     const names = tools.map((t) => t.name);
     assert.ok(names.includes("veya_ping_chain"));
     assert.ok(names.includes("veya_describe"));
