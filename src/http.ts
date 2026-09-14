@@ -12,6 +12,7 @@ import {
 } from "./config.js";
 import { extractBearer } from "./auth.js";
 import { createMcpServer, requestAuth } from "./server.js";
+import { renderLandingHtml } from "./landingPage.js";
 
 export function createHttpApp(cfg: McpServiceConfig = loadConfig()) {
   const app = express();
@@ -117,17 +118,7 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()) {
   });
 
   app.get("/", (_req, res) => {
-    res.type("html").send(`<!doctype html>
-<html><head><meta charset="utf-8"/><title>VEYA MCP</title></head>
-<body style="font-family:system-ui;max-width:40rem;margin:2rem auto;line-height:1.5">
-  <h1>VEYA MCP</h1>
-  <p>Paste this URL into Claude / Cursor (Streamable HTTP):</p>
-  <pre>${cfg.publicMcpUrl}</pre>
-  <p>Local: <code>POST http://127.0.0.1:${cfg.port}/mcp</code></p>
-  <p>Health: <a href="/health">/health</a></p>
-  <p>Settlement: Robinhood testnet <strong>46630</strong> · Sealed = AES-256-GCM (not FHE) · Not mainnet.</p>
-  <p>Local stdio MCP for operators: <code>veya-anchor/packages/mcp</code></p>
-</body></html>`);
+    res.type("html").send(renderLandingHtml(cfg));
   });
 
   return app;
