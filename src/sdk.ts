@@ -7,6 +7,8 @@ export function createReadClient(cfg: McpServiceConfig): VeyaClient {
     contractAddress: cfg.contractAddress,
     chainId: cfg.chainId,
     explorerUrl: cfg.explorerUrl,
+    validatorNodes: cfg.validatorNodes,
+    sealedNodeUrl: cfg.sealedNodeUrl,
   });
 }
 
@@ -20,6 +22,8 @@ export function createWriteClient(cfg: McpServiceConfig): VeyaClient {
     chainId: cfg.chainId,
     explorerUrl: cfg.explorerUrl,
     payerPrivateKey: cfg.relayerPrivateKey,
+    validatorNodes: cfg.validatorNodes,
+    sealedNodeUrl: cfg.sealedNodeUrl,
   });
 }
 
