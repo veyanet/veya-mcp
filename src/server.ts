@@ -7,6 +7,10 @@ import {
 } from "./config.js";
 import { registerPublicTools } from "./tools/public.js";
 import { registerWriteTools } from "./tools/write.js";
+import { registerCryptoTools } from "./tools/crypto.js";
+import { registerFleetTools } from "./tools/fleet.js";
+import { registerRegistryTools } from "./tools/registry.js";
+import { registerProductTools } from "./tools/product.js";
 
 export const requestAuth = new AsyncLocalStorage<{ bearer: string | null }>();
 
@@ -17,6 +21,10 @@ export function createMcpServer(cfg: McpServiceConfig): McpServer {
   });
 
   registerPublicTools(server, cfg);
+  registerCryptoTools(server, cfg);
+  registerFleetTools(server, cfg);
+  registerRegistryTools(server, cfg);
+  registerProductTools(server, cfg);
   registerWriteTools(server, cfg, () => requestAuth.getStore()?.bearer ?? null);
 
   return server;
