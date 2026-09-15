@@ -33,9 +33,9 @@ npm install @veyanet/sdk
 | Package | Job |
 |---------|-----|
 | `@veyanet/sdk` | Crypto, chain-id guard, consensus client, sealed client, `EvmAnchor` |
-| `@veyanet/mcp` | Streamable HTTP, tool names, Bearer write gate, honesty card, forwarding to `api.veyanet.tech` |
+| `@veyanet/mcp` | Streamable HTTP, tool names, product `apiKey` forwarding, honesty card, user-paid `EvmAnchor` writes |
 
-Agents should not embed a relayer key in an IDE plugin. MCP can hold that key on a **private** host. App servers that want full control import the SDK and never run MCP.
+Agents should not paste a mainnet key into a public MCP tool argument. Prefer a self-hosted MCP with `VEYA_PAYER_PRIVATE_KEY`. App servers that want full control import the SDK and never run MCP.
 
 The hosted product API also imports the SDK. Same pins: chain **46630**, `Veya.sol` `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`.
 
@@ -46,10 +46,10 @@ The hosted product API also imports the SDK. Same pins: chain **46630**, `Veya.s
 From this package’s `package.json`:
 
 ```json
-"@veyanet/sdk": "^1.2.0"
+"@veyanet/sdk": "^1.2.1"
 ```
 
-MCP version is **1.1.0**. SDK version is **1.2.0** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**, not from a sibling `../sdk` folder.
+MCP version is **1.2.1**. SDK version is **^1.2.2** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**.
 
 ---
 
@@ -70,11 +70,9 @@ new VeyaClient({
 
 No `payerPrivateKey`. Used for ping, hash, verify, on-chain reads, `runConsensus` via the client, PQ keygen.
 
-### `createWriteClient(cfg)`
+### `createWriteClient(cfg, payerPrivateKey)`
 
-Same fields plus `payerPrivateKey: cfg.relayerPrivateKey`. Throws if the relayer key is missing.
-
-Used only by write tools after Bearer auth.
+Same fields plus the **user's** `payerPrivateKey`. Used only by write tools after a product `apiKey` check. The hosted relayer is not passed here.
 
 ---
 
@@ -119,7 +117,7 @@ flowchart TB
 | Public stats, agents, certificates, executions | `GET {api}/public/...` |
 | Guest, rooms, agents, proofs, Boundnet invoke, protected exec | `{api}/auth`, `{api}/v1/...` |
 | Proof verify | `{api}/api/verify/:signature` |
-| On-chain writes | SDK `EvmAnchor` when Bearer + relayer configured |
+| On-chain writes | SDK `EvmAnchor` with the **user** payer key (`msg.sender` is the user) |
 
 Exact tool names: [TOOLS.md](./TOOLS.md).
 
@@ -145,8 +143,8 @@ MCP `src/api.ts` `apiRequest`:
 
 - Timeout 20 s
 - Optional JSON body
-- Optional `Authorization: Bearer <sessionToken>`
-- Returns `{ httpStatus, body }` even for 403 (so guest Build failures stay visible)
+- Product keys sent as `X-Api-Key` (and Bearer); JWTs as Bearer only
+- Returns `{ httpStatus, body }`. HTTP 4xx/5xx also set MCP `isError`.
 
 That path never constructs `VeyaClient`. The API server, elsewhere, uses the SDK for its own relayer.
 
