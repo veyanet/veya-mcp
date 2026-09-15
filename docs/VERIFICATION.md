@@ -50,7 +50,7 @@ Require:
 | `sealed` | contains `AES-256-GCM` |
 | `settlement` | Robinhood testnet 46630 |
 | `publicMcpUrl` | `https://mcp.veyanet.tech/mcp` |
-| `writesEnabled` | `false` on the public host (if `true`, treat as a policy surprise) |
+| `writesEnabled` | `true` on 1.2.0 (user-paid tools). Check `operatorRelayerWrites` is `false` on the public host |
 | `contractAddress` | `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
 
 ### A2. Describe
@@ -113,20 +113,18 @@ If SDK says 46630 and MCP health says otherwise, MCP env is wrong.
 
 ---
 
-## 5. Procedure D — operator writes (keys)
+## 5. Procedure D — user-paid writes
 
-Only on a **non-public** (or tightly controlled) MCP instance.
+1. Confirm write tools exist (`tools/list` includes `veya_store_commitment`).
+2. Call `veya_writes_status` — user-paid writes, not hosted relayer.
+3. Call a write **without** `apiKey` — `{ "error": "apiKey required" }`.
+4. Call a write with a random unfunded `payerPrivateKey` after a valid `apiKey` (or expect API-key reject first). Empty wallet must return: `You don't have testnet tokens. Please get them for the transaction.`
+5. With a real product key **and** that same funded wallet, call `veya_store_commitment` or `veya_anchor_proof`. Result `from` must be the user address.
+6. Call `veya_verify_transaction` on the returned `txHash`.
 
-1. Confirm `veya_writes_status` is **absent** and write tools **exist** (`tools/list`).
-2. Call `veya_hash_blake3` with a unique string.
-3. With `Authorization: Bearer <MCP_API_KEY>`, call `veya_store_commitment` for a **16-byte** environment UUID already registered (or register first).
-4. Call `veya_verify_transaction` on the returned `txHash`.
-5. Optionally `veya_verify_commitment_onchain`.
-6. Repeat with a **wrong** Bearer — the tool must error. Fail closed.
+Public paste URL still allows reads with no key. Prefer self-host for `VEYA_PAYER_PRIVATE_KEY`.
 
-Public `mcp.veyanet.tech` should skip this procedure; writes should be off.
-
-`scripts/verify-full.ts` in this repo is the operator automation for local user-vs-Bearer checks. It reads a relayer key from local `.env` and **must not print secrets**.
+`scripts/verify-full.ts` automates local user vs product-key checks. It **must not print secrets**.
 
 ---
 
@@ -137,7 +135,7 @@ Public `mcp.veyanet.tech` should skip this procedure; writes should be off.
 | `npm run smoke` | In-process `initialize`, `tools/list` (≥ 30 tools), `veya_describe`, `veya_ping_chain` |
 | `npm test` | Unit tests (config, etc.) |
 | `npm run lint` | `tsc --noEmit` |
-| `tsx scripts/verify-full.ts` | Local MCP with optional writes (needs `.env` relayer) |
+| `tsx scripts/verify-full.ts` | Local MCP workflow: reads free, apiKey required, unfunded payer message |
 | `tsx scripts/verify-live.ts` | Live public endpoints (operator) |
 
 Strangers can stop at Procedure A + explorer.
@@ -168,8 +166,9 @@ Keep these artifacts for diligence:
 | Describe sealed | AES-256-GCM |
 | Ping chain id | `46630` |
 | Known tx verify | Parses `Veya.sol` events; explorer agrees |
-| Public writes | `writesEnabled: false` |
-| Guest Build | 403 |
+| Health `writesEnabled` | `true` (user-paid tools registered); `operatorRelayerWrites` is `false` on the public host |
+| Guest Build from MCP | refused / mint product API key |
+| Unfunded payer | exact testnet-tokens sentence |
 | Consensus with fleet down | `consensus_reached: false` or tool error |
 
-Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for Bearer tests.
+Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for product keys and user-paid gas.
