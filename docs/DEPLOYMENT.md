@@ -4,7 +4,7 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.1.0`
+**npm:** `@veyanet/mcp@1.2.1`
 
 Strangers only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 
@@ -116,7 +116,7 @@ Copy `.env.example` → `.env` on the **server only**. The CLI does not auto-loa
 
 ## 5. Required production env
 
-Minimum for a **read-only public** host:
+Minimum for a **public** host (reads free; user-paid writes use the caller's key + wallet):
 
 ```bash
 NODE_ENV=production
@@ -191,7 +191,7 @@ Require MCP health:
 - `service` = `@veyanet/mcp`
 - `chainId` = `46630`
 - `sealed` mentions `AES-256-GCM`
-- `writesEnabled` = `false` on the public host
+- `writesEnabled` = `true` (user-paid write tools; `operatorRelayerWrites` is `false`)
 - `publicMcpUrl` = `https://mcp.veyanet.tech/mcp`
 
 Landing must tell humans to paste `https://mcp.veyanet.tech/mcp`.
@@ -206,10 +206,10 @@ Then connect a real MCP client and call `veya_describe` + `veya_ping_chain`. See
 
 | Host | Writes |
 |------|--------|
-| `mcp.veyanet.tech` | **Off** (no `MCP_API_KEY`, no relayer in env) |
-| Private operator MCP | On, dedicated testnet wallet, IP allowlist / VPN |
+| `mcp.veyanet.tech` | User-paid writes (product `apiKey` + **user** wallet). Hosted relayer off. |
+| Self-hosted MCP | Same, with `VEYA_PAYER_PRIVATE_KEY` in env so the key is not a tool argument |
 
-Do not enable Bearer writes on the public URL “just to demo.” Guest proofs already go through the **product API** (`veya_anchor_proof`).
+Do not put a hosted relayer key on the public URL. Guest listing still works. On-chain stamps from MCP spend the user's testnet ETH.
 
 ---
 
