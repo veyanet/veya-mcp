@@ -8,7 +8,7 @@ Paste this URL:
 https://mcp.veyanet.tech/mcp
 ```
 
-Cryptography and chain reads go through `@veyanet/sdk`. Product sessions and registry go through `https://api.veyanet.tech`. Consensus and sealed capacity belong to that API’s fleet. On-chain writes (when enabled on an MCP host) go through the SDK relayer key on **that** host.
+Cryptography and chain reads go through `@veyanet/sdk`. Product rooms and registry go through `https://api.veyanet.tech`. Consensus and sealed capacity belong to that API’s fleet. On-chain writes spend **your** wallet (product `apiKey` + `payerPrivateKey`).
 
 **[Architecture](./ARCHITECTURE.md)** • **[Quickstart](./QUICKSTART.md)** • **[Authentication](./AUTHENTICATION.md)** • **[SDK bridge](./SDK_BRIDGE.md)**
 
@@ -23,8 +23,8 @@ Cryptography and chain reads go through `@veyanet/sdk`. Product sessions and reg
 5. [2. Post-quantum crypto](#2-post-quantum-crypto-in-this-process)
 6. [3. Fleet, sealed, Boundnet, local memory](#3-fleet-sealed-boundnet-local-memory)
 7. [4. Public registry and on-chain reads](#4-public-registry-and-on-chain-reads)
-8. [5. Product API (session)](#5-product-api-session)
-9. [6. On-chain write tools (Bearer)](#6-on-chain-write-tools-bearer)
+8. [5. Product API (apiKey)](#5-product-api-apikey)
+9. [6. On-chain write tools (your wallet)](#6-on-chain-write-tools-your-wallet)
 10. [Live facts](#live-facts)
 11. [Index of tool names](#index-of-tool-names)
 
@@ -44,16 +44,16 @@ Auth is one of:
 | Label | Meaning |
 |-------|---------|
 | **None** | Anyone connected to the MCP URL |
-| **Session** | Pass `sessionToken` from `veya_guest_login` or a **wallet** JWT from the product API |
-| **Bearer** | HTTP `Authorization: Bearer <MCP_API_KEY>` on the MCP host, plus a relayer key on that host |
+| **Key** | Pass `apiKey` (`veya_dev_…` / `veya_live_…`) from the product site |
+| **Key + payer** | Product `apiKey` plus your wallet (`payerPrivateKey` or `VEYA_PAYER_PRIVATE_KEY`) |
 
-Guest sessions are **Use only**. Create environment, deploy agent, protected execution, Boundnet invoke as Build: the **product API returns 403**. That is policy, not a bug.
+Guest sessions are **Use listing only**. Create environment and on-chain writes need a product API key. On-chain writes also need **your** funded testnet wallet. Guest JWT is not a write credential.
 
 If validators or sealed-node are down, consensus/sealed tools **fail closed**. MCP never invents a matching hash.
 
-Public `mcp.veyanet.tech` often keeps **Bearer writes off**. Then you see `veya_writes_status` instead of store/attest tools.
+`veya_writes_status` is always registered. It explains user-paid writes. Empty wallet → `You don't have testnet tokens. Please get them for the transaction.`
 
-Approximate count: **~43 tools** with writes off, **~47** with writes on.
+Approximate count: **~48 tools** (writes always listed).
 
 ---
 
@@ -66,8 +66,8 @@ flowchart TB
   MCP --> Crypto["PQ crypto in process"]
   MCP --> Fleet["Consensus sealed Boundnet memory"]
   MCP --> Registry["Public registry and on-chain reads"]
-  MCP --> Product["Product API session"]
-  MCP --> Writes["On-chain writes if Bearer enabled"]
+  MCP --> Product["Product API apiKey"]
+  MCP --> Writes["On-chain writes from your wallet"]
   Honesty --> RPC["Robinhood RPC 46630"]
   Registry --> RPC
   Writes --> RPC
@@ -87,8 +87,8 @@ flowchart TB
 | Run 2-of-3 (if fleet up) | `veya_run_consensus` |
 | Seal a payload (if sealed up) | `veya_sealed_execute` |
 | Browse public agents / certificates | `veya_public_list_*` |
-| Guest stamp a proof | `veya_guest_login` then `veya_anchor_proof` |
-| Build a room | Wallet session — not guest |
+| Stamp a proof from your wallet | `veya_anchor_proof` with `apiKey` + `payerPrivateKey` |
+| Build a room | Product API key — not guest |
 
 ---
 
@@ -108,7 +108,7 @@ Product and public-registry tools wrap the HTTP call as:
 { "httpStatus": 200, "body": { } }
 ```
 
-A guest Build call still “succeeds” as an MCP tool if the API returned JSON — look at `httpStatus` **403**. That is the real answer.
+A guest Build call is an MCP error (`isError: true`) plus the product API `httpStatus` when the call reached the API. Mint a product API key after wallet login.
 
 `veya_api_health` uses `{ "httpStatus", "body" }` from `GET {VEYA_API_URL}/health` (8 second timeout). Other API tools use a 20 second timeout (`src/api.ts`).
 
@@ -196,19 +196,19 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 ## `veya_writes_status`
 
-**What it does.** Only registered when this MCP host has **writes disabled** (no `MCP_API_KEY` or no relayer key). Tells you writes are off and what env vars an operator must set.
+**What it does.** Always registered. Explains that on-chain writes are **user-paid**: product `apiKey` + your wallet. Does not use the hosted relayer.
 
-**When to use it.** Public MCP: to confirm you cannot store commitments here. That is often **intentional**.
+**When to use it.** Before a write, to confirm who pays gas.
 
 **Arguments.** None.
 
-**What you get back.** `{ writesEnabled: false, reason: "..." }`.
+**What you get back.** `{ userPaidWrites: true, operatorRelayerWrites, requires, gasPayer, emptyWallet }`.
 
 ---
 
 # 2. Post-quantum crypto (in this process)
 
-**Auth: none.** Keys are generated **here**, not on chain, unless you later call a Bearer write tool.
+**Auth: none.** Keys are generated **here**, not on chain, unless you later call a user-paid write tool.
 
 Treat `privateKeyHex` like a secret. Do not paste it into public chats.
 
@@ -445,18 +445,19 @@ Return wrapper for `/public/*` tools: `{ httpStatus, body }`.
 
 ---
 
-# 5. Product API (session)
+# 5. Product API (apiKey)
 
 These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper: `{ httpStatus, body }`.
 
-**Auth: Session** — pass `sessionToken` unless noted.
+**Auth: Key** — pass `apiKey` (`veya_dev_…` / `veya_live_…`) unless noted. Guest JWT may list only.
 
 | Tool | HTTP |
 |------|------|
-| `veya_guest_login` | `POST /auth/guest` (no token) |
+| `veya_guest_login` | `POST /auth/guest` (no token; listing only) |
+| `veya_account` | `GET /v1/account` |
 | `veya_list_environments` | `GET /v1/environments` |
 | `veya_get_environment` | `GET /v1/environments/:id` |
-| `veya_create_environment` | `POST /v1/environments` |
+| `veya_create_environment` | `POST /v1/environments` (no gas) |
 | `veya_list_agents` | `GET /v1/environments/:id/agents` |
 | `veya_deploy_agent` | `POST /v1/environments/:id/agents` |
 | `veya_list_api_memory` | `GET /v1/environments/:id/memory` |
@@ -464,50 +465,56 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 | `veya_run_protected_execution` | `POST /v1/environments/:id/executions/protected` |
 | `veya_boundnet_invoke` | `POST /v1/environments/:id/boundnet/invoke` |
 | `veya_list_proofs` | `GET /v1/proofs` |
-| `veya_anchor_proof` | `POST /v1/proofs/anchor` |
-| `veya_verify_proof_api` | `GET /api/verify/:signature` (no session) |
+| `veya_anchor_proof` | User-paid `storeCommitment` (not the hosted relayer stamp) |
+| `veya_verify_proof_api` | `GET /api/verify/:signature` (no key) |
 
-### Guest vs wallet (read this once)
+### Guest vs product key
 
-| Action | Guest | Wallet |
-|--------|-------|--------|
-| Login | `veya_guest_login` | Product API `/auth/nonce` + `/auth/verify` (not an MCP wallet popup) |
-| List showcase / Use proofs | Yes | Yes |
-| Anchor content proof | Yes (Use) | Yes |
-| Create environment | **403** | Yes |
-| Deploy agent | **403** | Yes |
-| Protected execution | **403** | Yes |
-| Boundnet invoke | Policy + guest 403 on Build | Wallet + allowlist |
+| Action | Guest JWT | Product API key |
+|--------|-----------|-----------------|
+| Login | `veya_guest_login` | Mint key on the product site after wallet login |
+| List showcase / Use rooms | Yes | Yes |
+| Create environment (API row) | Refused by MCP | Yes (no gas) |
+| Deploy agent / protected / Boundnet | Refused / 403 | Yes |
+| On-chain stamp | Refused | Yes — **your** wallet pays |
 
 ---
 
 ## `veya_guest_login`
 
-**What it does.** `POST /auth/guest` on the product API. Returns a JWT for **Use-only**.
+**What it does.** `POST /auth/guest` on the product API. Returns a JWT for **Use listing only**.
 
-**When to use it.** Agent should stamp/list proofs with a Use session.
+**When to use it.** Browse showcase rooms. Not for writes.
 
 **Arguments.** None.
 
-**What you get back.** Token, `mode: guest`, wallet label of the **relayer** (shared). Treat it as a shared demo Use session. Guest Build tools return API **403**.
+**What you get back.** Token, `mode: guest`. Guest writes from MCP are refused.
+
+---
+
+## `veya_account`
+
+**What it does.** `GET /v1/account` — wallet bound to this API key.
+
+**Arguments.** `apiKey`.
 
 ---
 
 ## `veya_list_environments` / `veya_get_environment`
 
-**What they do.** List rooms for the session, or get one by `environmentId`. Guest sees Use/showcase scope, not other people’s Build rooms.
+**What they do.** List rooms for the key, or get one by `environmentId`. Guest JWT sees Use/showcase scope.
 
-**Arguments.** `sessionToken` (required for a useful call). Get also needs `environmentId`.
+**Arguments.** `apiKey` (required). Get also needs `environmentId`.
 
 ---
 
 ## `veya_create_environment`
 
-**What it does.** `POST /v1/environments` — **Build**.
+**What it does.** `POST /v1/environments` — **Build** API row. Does **not** spend gas. Register on chain with `veya_register_environment`.
 
-**Arguments.** `sessionToken`, `name`, `type` (`research` \| `governance` \| `treasury` \| `contributor` \| `protocol` \| `desci`).
+**Arguments.** `apiKey`, `name`, `type` (`research` \| `governance` \| `treasury` \| `contributor` \| `protocol` \| `desci`).
 
-**Guest:** **403**. Invalid type still 403 for guest (gate before schema tricks).
+**Guest:** refused (`apiKey` must be a product key).
 
 ---
 
@@ -515,9 +522,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What they do.** List agents in a room, or deploy one (**Build**).
 
-**Deploy arguments.** `sessionToken`, `environmentId`, `type`, optional `permissionConfig` (object — e.g. allowed tools).
-
-**Guest deploy:** **403**.
+**Deploy arguments.** `apiKey`, `environmentId`, `type`, optional `permissionConfig`.
 
 ---
 
@@ -531,37 +536,37 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 ## `veya_run_protected_execution`
 
-**What it does.** `POST .../executions/protected` on the API — sealed path as the **hosted product** runs it (AES-256-GCM on the API’s sealed-node). **Build.** Guest **403**.
+**What it does.** `POST .../executions/protected` on the API — sealed path as the **hosted product** runs it (AES-256-GCM on the API’s sealed-node). **Build.** Product `apiKey` required.
 
-**Arguments.** `sessionToken`, `environmentId`, `agentId`, `eventType`, `payload`, optional `disclose` / `seal` field name lists.
+**Arguments.** `apiKey`, `environmentId`, `agentId`, `eventType`, `payload`, optional `disclose` / `seal` field name lists.
 
 ---
 
 ## `veya_boundnet_invoke`
 
-**What it does.** `POST .../boundnet/invoke` — agent may call `toolName` only if policy allows. Deny-by-default on the **product** side.
+**What it does.** `POST .../boundnet/invoke` — agent may call `toolName` only if policy allows.
 
-**Arguments.** `sessionToken`, `environmentId`, `agentId`, `toolName`, optional `arguments` object.
-
-**Guest:** Build-gated (403) like other writes.
+**Arguments.** `apiKey`, `environmentId`, `agentId`, `toolName`, optional `arguments` object.
 
 ---
 
 ## `veya_list_proofs` / `veya_anchor_proof`
 
-**What they do.** Use-mode proofs: list your stamps, or paste `label` + `content` and get a chain-backed proof (tx hash) via `POST /v1/proofs/anchor`.
+**What they do.** List stamps, or hash `label` + `content` with BLAKE3 and `storeCommitment` from **your** wallet.
 
-**Guest:** allowed on Use (API relayer pays testnet gas, with caps). This is **not** the official token customer story; it is the product Use path.
+**Guest:** MCP refuses. Mint a product API key and fund your wallet.
 
-**Anchor arguments.** `sessionToken`, `label`, `content`.
+**Anchor arguments.** `apiKey`, `payerPrivateKey` (or env), `label`, `content`, optional product `environmentId`.
 
-**What you get back.** Proof id, content hash, `attestationTx`, explorer fields.
+**What you get back.** `{ txHash, explorer, from, hash, label }`. `from` is your address.
+
+Empty wallet: `You don't have testnet tokens. Please get them for the transaction.`
 
 ---
 
 ## `veya_verify_proof_api`
 
-**What it does.** Public product verify: `GET /api/verify/:signature` (tx hash). No session required.
+**What it does.** Public product verify: `GET /api/verify/:signature` (tx hash). No key required.
 
 **Arguments.** `signature` (tx hash string).
 
@@ -569,25 +574,25 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 ---
 
-# 6. On-chain write tools (Bearer)
+# 6. On-chain write tools (your wallet)
 
-Registered **only** if this MCP process has `MCP_API_KEY` **and** `VEYA_RELAYER_PRIVATE_KEY` (or deployer alias). Every call still needs:
+Always registered. Every call needs a product `apiKey` and a funded `payerPrivateKey` (tool arg or `VEYA_PAYER_PRIVATE_KEY`). `msg.sender` is **your** address. The hosted relayer is not used.
 
-```http
-Authorization: Bearer <MCP_API_KEY>
+Empty wallet:
+
+```text
+You don't have testnet tokens. Please get them for the transaction.
 ```
 
-Public `mcp.veyanet.tech` should usually **not** enable these.
-
-These spend **testnet gas** from the relayer. They are not guest Use stamps (prefer `veya_anchor_proof` + product API for human content proofs).
+Prefer self-hosting MCP so the private key stays in env, not in a tool argument to the public URL.
 
 ## `veya_store_commitment`
 
 Stores a 32-byte digest on `Veya.sol` `storeCommitment` for a 16-byte environment UUID.
 
-**Args.** `environmentUuidHex`, `commitmentHex`.
+**Args.** `apiKey`, `payerPrivateKey`, `environmentUuidHex`, `commitmentHex`.
 
-**Returns.** `{ txHash, explorer }`.
+**Returns.** `{ txHash, explorer, from }`.
 
 ---
 
@@ -595,25 +600,25 @@ Stores a 32-byte digest on `Veya.sol` `storeCommitment` for a 16-byte environmen
 
 `attestExecution` with BLAKE3 execution hash and ML-DSA signature bytes.
 
-**Args.** `environmentUuidHex`, `blake3HashHex`, `mldsaSigHex`.
+**Args.** `apiKey`, `payerPrivateKey`, `environmentUuidHex`, `blake3HashHex`, `mldsaSigHex`.
 
 ---
 
 ## `veya_register_environment`
 
-`registerEnvironment` with PQ public-key hash and `envType` (0–10, default 0).
+`registerEnvironment` from your wallet. Pass product `environmentId` to load the UUID from the product API and confirm the tx so the console sees it (`consoleSynced`). Do not retry if the on-chain `txHash` is already returned.
 
-**Args.** `environmentUuidHex`, `pqPubkeyHashHex`, `envType`.
+**Args.** `apiKey`, `payerPrivateKey`, `environmentId` **or** `environmentUuidHex`, optional `pqPubkeyHashHex`, `envType`.
 
 ---
 
 ## `veya_register_pq_onchain`
 
-Generates ML-DSA keys in process, then registers environment + a commitment on chain (operator helper).
+Generates ML-DSA keys in process, then registers environment + a commitment on chain from your wallet.
 
-**Args.** optional `envType` (default 1).
+**Args.** `apiKey`, `payerPrivateKey`, optional `envType` (default 1).
 
-**Returns.** public key hex/hash, `environmentTx`, `memoTx`, explorer. **Does not return the private key in the snippet above** — treat whatever the SDK returns as custody-sensitive; do not log it.
+**Returns.** public key hex/hash, `environmentTx`, `memoTx`, explorer, `from`. Do not log private keys.
 
 ---
 
@@ -621,9 +626,10 @@ Generates ML-DSA keys in process, then registers environment + a commitment on c
 
 Links identity hash to execution hash on chain (`anchorPqAttestation`).
 
-**Args.** `environmentUuidHex`, `identityHashHex`, `executionHashHex`.
+**Args.** `apiKey`, `payerPrivateKey`, `environmentUuidHex`, `identityHashHex`, `executionHashHex`.
 
 ---
+
 
 # Live facts
 
@@ -645,7 +651,7 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_hash_blake3` | Public | None |
 | `veya_verify_transaction` | Public | None |
 | `veya_api_health` | Public | None |
-| `veya_writes_status` | Writes-off only | None |
+| `veya_writes_status` | Writes | None |
 | `veya_pq_keygen` | Crypto | None |
 | `veya_pq_sign` | Crypto | None |
 | `veya_pq_verify` | Crypto | None |
@@ -670,30 +676,31 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_commitment_exists` | Registry | None |
 | `veya_read_environment_onchain` | Registry | None |
 | `veya_read_agent_onchain` | Registry | None |
-| `veya_guest_login` | Product | None (issues a session) |
-| `veya_list_environments` | Product | Session |
-| `veya_get_environment` | Product | Session |
-| `veya_create_environment` | Product | Session (guest **403**) |
-| `veya_list_agents` | Product | Session |
-| `veya_deploy_agent` | Product | Session (guest **403**) |
-| `veya_list_api_memory` | Product | Session |
-| `veya_list_executions` | Product | Session |
-| `veya_run_protected_execution` | Product | Session (guest **403**) |
-| `veya_boundnet_invoke` | Product | Session (guest **403**) |
-| `veya_list_proofs` | Product | Session |
-| `veya_anchor_proof` | Product | Session (Use allowed) |
+| `veya_guest_login` | Product | None (listing only) |
+| `veya_account` | Product | Key |
+| `veya_list_environments` | Product | Key |
+| `veya_get_environment` | Product | Key |
+| `veya_create_environment` | Product | Key |
+| `veya_list_agents` | Product | Key |
+| `veya_deploy_agent` | Product | Key |
+| `veya_list_api_memory` | Product | Key |
+| `veya_list_executions` | Product | Key |
+| `veya_run_protected_execution` | Product | Key |
+| `veya_boundnet_invoke` | Product | Key |
+| `veya_list_proofs` | Product | Key |
+| `veya_anchor_proof` | Writes | Key + payer |
 | `veya_verify_proof_api` | Product | None |
-| `veya_store_commitment` | Writes | Bearer |
-| `veya_attest_execution` | Writes | Bearer |
-| `veya_register_environment` | Writes | Bearer |
-| `veya_register_pq_onchain` | Writes | Bearer |
-| `veya_anchor_pq_attestation` | Writes | Bearer |
+| `veya_store_commitment` | Writes | Key + payer |
+| `veya_attest_execution` | Writes | Key + payer |
+| `veya_register_environment` | Writes | Key + payer |
+| `veya_register_pq_onchain` | Writes | Key + payer |
+| `veya_anchor_pq_attestation` | Writes | Key + payer |
 
 ## Related
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — pictures of how tools sit in the system  
-- [AUTHENTICATION.md](./AUTHENTICATION.md) — Bearer and sessions  
-- [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what is SDK vs API  
+- [AUTHENTICATION.md](./AUTHENTICATION.md) — product key vs your wallet  
+- [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what is SDK vs API
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [QUICKSTART.md](./QUICKSTART.md) — first five minutes  
-- [TRANSPORT.md](./TRANSPORT.md) — why in-process Boundnet does not survive `POST /mcp`  
+- [TRANSPORT.md](./TRANSPORT.md) — why in-process Boundnet does not survive \POST /mcp
