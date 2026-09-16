@@ -44,7 +44,7 @@ Node **20+** (`package.json` `engines`).
 
 There is no remote config service. There is no fetch of an IDL.
 
-Scripts such as `scripts/verify-full.ts` may read `.env` themselves for a relayer key. The production binary `veya-mcp` does not.
+Scripts such as `scripts/verify-full.ts` may read `.env` themselves for a test payer key. The production binary `veya-mcp` does not.
 
 ---
 
@@ -62,14 +62,15 @@ Type `McpServiceConfig`:
 | `explorerUrl` | `ROBINHOOD_EXPLORER_URL` |
 | `contractAddress` | `VEYA_CONTRACT_ADDRESS` |
 | `apiUrl` | `VEYA_API_URL` (trailing slash stripped) |
-| `mcpApiKey` | `MCP_API_KEY` or `null` |
-| `relayerPrivateKey` | `VEYA_RELAYER_PRIVATE_KEY` or `VEYA_DEPLOYER_PRIVATE_KEY` or `null` |
+| `mcpApiKey` | `MCP_API_KEY` or `null` (operator relayer path only) |
+| `relayerPrivateKey` | `VEYA_RELAYER_PRIVATE_KEY` or `VEYA_DEPLOYER_PRIVATE_KEY` or `null` (not used for user-paid writes) |
+| `payerPrivateKey` | `VEYA_PAYER_PRIVATE_KEY` or `null` (your wallet for user-paid writes) |
 | `validatorNodes` | CSV `VEYA_VALIDATOR_NODES` |
 | `sealedNodeUrl` | `VEYA_SEALED_NODE_URL` |
 | `corsOrigins` | CSV `CORS_ORIGIN` |
 | `nodeEnv` | `NODE_ENV` |
 
-`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.1.0` (code constant, not read from env).
+`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.1` (code constant, not read from env).
 
 ---
 
@@ -114,13 +115,21 @@ Used by `veya_api_health`, all `veya_public_*` and product session tools, and (i
 
 See [section 6](#6-fleet-defaults-read-this-twice).
 
-### Write gate
+### User-paid writes
 
 | Variable | Type | Default |
 |----------|------|---------|
-| `MCP_API_KEY` | string | empty → writes disabled |
-| `VEYA_RELAYER_PRIVATE_KEY` | `0x` hex secp256k1 | empty → writes disabled |
-| `VEYA_DEPLOYER_PRIVATE_KEY` | `0x` hex | used only if relayer unset |
+| `VEYA_PAYER_PRIVATE_KEY` | `0x` hex secp256k1 | empty → pass `payerPrivateKey` per tool call |
+
+On-chain writes always use **this** key (or the tool argument). `msg.sender` is your address. The hosted relayer is not the gas payer.
+
+### Operator relayer (not the user path)
+
+| Variable | Type | Default |
+|----------|------|---------|
+| `MCP_API_KEY` | string | empty → operator relayer writes off |
+| `VEYA_RELAYER_PRIVATE_KEY` | `0x` hex | empty |
+| `VEYA_DEPLOYER_PRIVATE_KEY` | `0x` hex | unused leftover (same as relayer) |
 
 ### CORS
 
@@ -135,12 +144,11 @@ Empty: browser Origins rejected; no-Origin MCP clients still work.
 ## 5. Writes gate
 
 ```ts
-writesEnabled(cfg) === Boolean(cfg.mcpApiKey && cfg.relayerPrivateKey)
+writesEnabled() === true
+operatorRelayerWritesEnabled() === false
 ```
 
-Both must be non-empty after trim. Then write tools register; callers still send `Authorization: Bearer <MCP_API_KEY>`.
-
-Public host: leave both empty (or unset). See [AUTHENTICATION.md](./AUTHENTICATION.md).
+User-paid write tools are **always registered**. They need a product `apiKey` and `VEYA_PAYER_PRIVATE_KEY` (or the tool argument). The host relayer is not used. See [AUTHENTICATION.md](./AUTHENTICATION.md).
 
 ---
 
@@ -177,11 +185,13 @@ See [TRANSPORT.md](./TRANSPORT.md). `credentials: true` with an allowlist. MCP n
 |---------|---------|
 | Wrong chain id / RPC | Writes `CHAIN_MISMATCH`; reads look like another network |
 | `PUBLIC_MCP_URL` = private host in prod | Landing tells people the wrong paste URL (landing HTML currently **forces** the canonical public URL; health still uses `cfg.publicMcpUrl`) |
-| Relayer set, no `MCP_API_KEY` | Writes stay disabled |
-| `MCP_API_KEY` set, no relayer | Writes stay disabled |
+| Relayer set, no `MCP_API_KEY` | Operator relayer writes stay off (user-paid writes still work) |
+| `MCP_API_KEY` set, no relayer | Operator relayer writes stay off |
+| Empty `VEYA_PAYER_PRIVATE_KEY` and no tool arg | `payerPrivateKey required` |
+| Unfunded payer | `You don't have testnet tokens. Please get them for the transaction.` |
 | Documenting loopback as the product path | Users cannot reach your private network |
 | Pointing fleet at empty loopback on a host without validators | Consensus/sealed fail — expected |
-| Using guest JWT as `MCP_API_KEY` | Product and write auth confused |
+| Using guest JWT as `apiKey` on a write | MCP refuses; mint a product key |
 
 Health `publicMcpUrl` follows env. Landing HTML uses `CANONICAL_PUBLIC_MCP_URL`. Keep them aligned: `PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp`.
 
