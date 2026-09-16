@@ -4,7 +4,7 @@
 
 This document explains how the MCP server is built, who talks to whom, and what a tool call actually does. Words stay simple. Details stay real.
 
-[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.1.0-cb3837?style=flat-edge)](../package.json)
+[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.1-cb3837?style=flat-edge)](../package.json)
 [![Robinhood Testnet](https://img.shields.io/badge/Testnet-Chain%20ID%2046630-blue?style=flat-edge)](https://explorer.testnet.chain.robinhood.com/address/0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84)
 [![Public MCP](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9?style=flat-edge)](https://mcp.veyanet.tech/mcp)
 
@@ -59,7 +59,7 @@ Live product facts:
 | Contract | `Veya.sol` is a protocol contract (commitments, environments, attestations). |
 | Sealed path | **AES-256-GCM** on sealed-node (software process boundary). |
 | Settlement | Robinhood **testnet 46630**. |
-| Sessions | Guest and wallet JWTs come from the **product API**. MCP forwards `sessionToken`. |
+| Sessions | Product API keys (`veya_dev_` / `veya_live_`) come from the product site. MCP forwards `apiKey`. |
 | Transport | `veya-mcp` is an **HTTP** Streamable HTTP server. |
 | Quorum | Agreement is matching BLAKE3 hashes (2-of-3). Unreachable nodes return `consensus_reached: false`. |
 
@@ -69,8 +69,8 @@ Live product facts:
 
 | Field | Value |
 |-------|-------|
-| npm package | `@veyanet/mcp` **1.1.0** |
-| SDK it depends on | `@veyanet/sdk` **^1.2.0** |
+| npm package | `@veyanet/mcp` **1.2.1** |
+| SDK it depends on | `@veyanet/sdk` **^1.2.1** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Landing | `https://mcp.veyanet.tech/` |
 | MCP health | `https://mcp.veyanet.tech/health` |
@@ -114,7 +114,7 @@ flowchart LR
 | Curious user | Public MCP URL. Optional: `veya_guest_login` for Use proofs. |
 | TypeScript integrator | `@veyanet/sdk` from npm. MCP is optional. |
 | Operator of `mcp.veyanet.tech` | This repo (or the npm binary), TLS, env pins, usually **writes off**. |
-| Operator who wants chain writes from MCP | Private MCP instance + `MCP_API_KEY` + funded testnet relayer key. |
+| Operator who wants chain writes from MCP | Product API key + **your** funded testnet wallet (`VEYA_PAYER_PRIVATE_KEY`). |
 
 ---
 
@@ -176,7 +176,7 @@ MCP client (Claude / Cursor)
         ▼
 ┌───────────────────────────────────────────┐
 │  @veyanet/mcp                             │
-│  owns: HTTP, tool list, Bearer gate       │
+│  owns: HTTP, tool list, user-paid writes  │
 │  does not own: crypto math, Veya.sol ABI  │
 └───────────┬─────────────────┬─────────────┘
             │                 │
@@ -209,8 +209,8 @@ Each layer only talks to the layer below it for its job. MCP does not re-impleme
 +--------------------------------v---------------------------------+
 | L3  Tool policy                                                  |
 |     registerPublic / crypto / fleet / registry / product / write |
-|     Bearer AsyncLocalStorage for writes                          |
-|     sessionToken forwarded to product API                        |
+|     product apiKey forwarded as X-Api-Key                        |
+|     user-paid writes via EvmAnchor                               |
 +--------------------------------+---------------------------------+
                                  |
           +----------------------+----------------------+
@@ -270,7 +270,6 @@ sequenceDiagram
   participant R as Robinhood RPC
 
   C->>H: JSON-RPC tools/call veya_ping_chain
-  H->>H: extractBearer (ignored for this tool)
   H->>T: new McpServer + handleRequest
   T->>S: createReadClient(cfg)
   S->>R: eth_chainId / block / contract
@@ -281,39 +280,31 @@ sequenceDiagram
 
 No API key. No guest JWT. If RPC is down, the tool returns an error JSON (`isError: true` for SDK-backed tools that use `toolError`).
 
-### 6.2 Product session tool (example: `veya_list_environments`)
+### 6.2 Product tool (example: `veya_list_environments`)
 
-1. Client already called `veya_guest_login` (or has a wallet JWT from the product console).
-2. Client passes `sessionToken` as a **tool argument**, not as the MCP HTTP Bearer.
-3. `apiRequest` sets `Authorization: Bearer <sessionToken>` toward `VEYA_API_URL`.
-4. Guest Build routes (`veya_create_environment`, deploy, protected exec) still get **HTTP 403** from the API. MCP does not override that.
-
-MCP HTTP Bearer (`MCP_API_KEY`) and product `sessionToken` are **two different keys**. Mixing them up is a common operator mistake.
+1. Client minted a product API key on the product site (or has a guest JWT for listing only).
+2. Client passes `apiKey` as a **tool argument**.
+3. `apiRequest` sets `X-Api-Key` toward `VEYA_API_URL` for product keys.
+4. Guest JWT on create/deploy/write tools is refused by MCP. Mint a product key.
 
 ### 6.3 Write tool (example: `veya_store_commitment`)
 
-Only exists if `writesEnabled(cfg)` is true (`MCP_API_KEY` **and** relayer/deployer private key).
+Always registered. Needs product `apiKey` + the user's `payerPrivateKey`. `msg.sender` is the user.
 
 ```mermaid
 sequenceDiagram
-  participant C as Authorized client
-  participant H as POST /mcp + Authorization
+  participant C as User client
   participant W as write tool
-  participant A as assertWriteAuthorized
+  participant P as prepareUserPayer
   participant E as EvmAnchor
   participant R as Robinhood RPC
 
-  C->>H: Bearer MCP_API_KEY
-  H->>W: bearer from AsyncLocalStorage
-  W->>A: key match + relayer present
-  A-->>W: throw if mismatch
-  W->>E: storeCommitment(uuid16, digest32)
-  E->>E: ensureRobinhoodChain 46630
-  E->>R: signed tx
-  R-->>C: txHash + explorer URL
+  C->>W: apiKey plus payerPrivateKey
+  W->>P: product key, match wallet, check ETH
+  P-->>W: throw tokens sentence if empty
+  W->>E: storeCommitment from user wallet
+  E->>R: eth_sendRawTransaction
 ```
-
-Public `mcp.veyanet.tech` should keep writes **off**. Then this tool is not registered; `veya_writes_status` is registered instead.
 
 ### 6.4 Stateless vs session HTTP
 
@@ -338,7 +329,7 @@ Source of truth is this repo’s `src/` tree.
 | `src/http.ts` | Express app, CORS, health, `/mcp`, `/mcp/session`, landing HTML. |
 | `src/landingPage.ts` | HTML for `GET /`. Always shows the public paste URL. |
 | `src/server.ts` | Builds `McpServer`, registers all tool groups. |
-| `src/auth.ts` | Parse `Authorization: Bearer`, fail-closed write assert. |
+| `src/auth.ts` | Optional `Authorization: Bearer` parser (unused on the user-paid write path). |
 | `src/sdk.ts` | `VeyaClient` factories + hex → bytes helper. |
 | `src/api.ts` | `fetch` wrapper to the product API + JSON tool replies. |
 | `src/tools/public.ts` | Describe, ping, hash, verify tx, API health. |
@@ -380,10 +371,10 @@ flowchart TB
 | Crypto | None | SDK in this process |
 | Fleet | None on MCP (fleet may still be unreachable) | SDK HTTP to configured node URLs |
 | Registry | None | Product `/public/*` or SDK `eth_call` |
-| Product | `sessionToken` argument | Product `/auth`, `/v1`, `/api/verify` |
-| Writes | HTTP Bearer `MCP_API_KEY` | SDK `EvmAnchor` + relayer |
+| Product | `apiKey` argument | Product `/auth`, `/v1`, `/api/verify` |
+| Writes | `apiKey` + user payer | SDK `EvmAnchor` from the user's wallet |
 
-Approximate count: **~43** tools with writes off, **~47** with writes on (`veya_writes_status` replaced by five write tools).
+Approximate count: **~49** tools. User-paid writes are always listed.
 
 ---
 
@@ -393,14 +384,14 @@ Approximate count: **~43** tools with writes off, **~47** with writes on (`veya_
 ┌─────────────────────────────────────────────────────────────┐
 │  MCP Client                                                 │
 │  Trusts: TLS to mcp.veyanet.tech, JSON tool text            │
-│  Does not get: relayer key, MCP_API_KEY, validator ports    │
+│  Does not get: validator ports, hosted relayer key              │
 └────────────────────────────┬────────────────────────────────┘
                              │ HTTPS
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  MCP host                                                   │
 │  Trusts: @veyanet/sdk, Robinhood RPC, product API TLS       │
-│  Holds (if writes on): MCP_API_KEY, relayer secp256k1       │
+│  Holds (optional): VEYA_PAYER_PRIVATE_KEY for self-host writes  │
 │  May reach: 127.0.0.1:7701–7703 and :7800 IF it shares a    │
 │  machine with the fleet (typical on the API host)           │
 └───────────────┬─────────────────────────────┬───────────────┘
@@ -433,21 +424,18 @@ They still cannot treat that as “FHE ran” or “mainnet settled.”
 
 ```mermaid
 flowchart TD
-  K1{"MCP_API_KEY set?"}
-  K2{"Relayer or deployer key set?"}
-  K1 -->|no| Off["writesEnabled = false"]
-  K2 -->|no| Off
+  K1{"product apiKey?"}
+  K2{"payerPrivateKey?"}
+  K3{"wallet has testnet ETH?"}
+  K1 -->|no| Fail1["apiKey required"]
+  K2 -->|no| Fail2["payerPrivateKey required"]
   K1 -->|yes| K2
-  K2 -->|yes| On["Register five write tools"]
-  Off --> Status["Register veya_writes_status"]
-  On --> Call{"Bearer equals MCP_API_KEY?"}
-  Call -->|no| Fail["Tool throws Unauthorized"]
-  Call -->|yes| Tx["EvmAnchor send tx"]
+  K2 -->|yes| K3
+  K3 -->|no| Fail3["You don't have testnet tokens"]
+  K3 -->|yes| Tx["EvmAnchor send from user wallet"]
 ```
 
-Bearer compare in `assertWriteAuthorized` is ordinary string equality (not a constant-time compare). Treat the key as high-entropy and rotate if leaked. Relayer key must never appear in tool JSON, `/health`, or logs.
-
-Product `sessionToken` is **not** `MCP_API_KEY`.
+Payer keys must never appear in tool JSON, `/health`, or logs. Prefer `VEYA_PAYER_PRIVATE_KEY` on a self-hosted process.
 
 Details: [AUTHENTICATION.md](./AUTHENTICATION.md).
 
@@ -477,7 +465,7 @@ Local memory tools write `~/.veya` on the **MCP machine**. That is not the conso
 |------|-----|
 | Agent paste URL | MCP |
 | Human product console | `https://app.veyanet.tech` (product, not this package) |
-| Guest stamp a text proof | MCP `veya_anchor_proof` **or** the console — both hit the API |
+| Guest stamp a text proof | Product console Use-mode. MCP `veya_anchor_proof` is user-paid and refuses guest. |
 | TypeScript in your process | `@veyanet/sdk` |
 | Create a Build room | Wallet session on the **API**, not guest |
 
@@ -513,7 +501,7 @@ MCP does not pick algorithms. It calls the SDK.
 | ML-DSA-44 (FIPS 204) | Agent/operator identity, validator signatures, secure-message sign |
 | Kyber-768 (FIPS 203) | `veya_route_secure_message` session wrap |
 | AES-256-GCM | Sealed-node payload seal (**not** FHE) |
-| secp256k1 | Relayer `msg.sender` for `Veya.sol` gas (classical EVM) |
+| secp256k1 | User wallet `msg.sender` for `Veya.sol` gas (classical EVM) |
 
 On-chain ML-DSA **verify** is not done inside the EVM. The chain stores hashes and optional signature bytes. Auditors verify with the SDK.
 
@@ -529,9 +517,9 @@ On-chain ML-DSA **verify** is not done inside the EVM. The chain stores hashes a
 | Product API `degraded` | Health body says validators/sealed unreachable | Fleet on the **API** host — MCP describe can still work |
 | Validators down | `consensus_reached: false` or tool error | Do not treat as success |
 | Sealed down | `veya_sealed_execute` / protected exec error | Fail closed |
-| Guest + Build tool | API **403** | Use a wallet session |
-| Writes disabled | `veya_writes_status` | Expected on public MCP |
-| Wrong Bearer | Write tool error | Key mismatch |
+| Guest + Build tool | MCP `isError` / product API 403 | Mint a product API key |
+| Unfunded payer | Exact testnet-tokens sentence | Fund the wallet that minted the key |
+| Wrong payer wallet | Does not match the API key wallet | Use the same wallet |
 | Wrong chain id | SDK `CHAIN_MISMATCH` on writes | Pins must stay 46630 |
 
 JSON body over **1 MB** is rejected by Express.
@@ -548,7 +536,7 @@ These must stay true in code and docs:
 2. Settlement chain id is **46630** unless an operator deliberately self-hosts a different pin (then they must not call it “VEYA production”).
 3. Sealed is **AES-256-GCM**.
 4. `Veya.sol` is a protocol contract.
-5. Writes require **both** API key and relayer key, then Bearer match.
+5. On-chain writes require a product API key and the user's funded wallet (`msg.sender` is the user).
 6. Guest Build is **403**.
 7. Unreachable quorum reports `consensus_reached: false`.
 8. `/health` and `veya_describe` stay honest about testnet and sealed.
@@ -569,7 +557,7 @@ These must stay true in code and docs:
 | Boundnet | Deny-by-default tool routing between agents |
 | Use | Guest-allowed product path (list/stamp proofs) |
 | Build | Create rooms, deploy agents, protected exec — wallet, not guest |
-| Relayer | secp256k1 key that pays testnet gas for `Veya.sol` writes |
+| Relayer | Unused on the user-paid MCP write path. Gas is paid by the user's wallet. |
 | Commitment | 32-byte digest stored on chain |
 | Fail closed | Error or `false` instead of a fake success |
 
