@@ -64,8 +64,8 @@ Related URLs:
 |--------|------|------|------|
 | `GET` | `/` | None | Landing HTML. Always tells humans to paste `https://mcp.veyanet.tech/mcp`. |
 | `GET` | `/health` | None | Honesty JSON (version, chain id, writes flag, sealed claim). |
-| `POST` | `/mcp` | Optional Bearer (writes only) | **Primary** Streamable HTTP. Stateless. |
-| `POST` | `/mcp/session` | Optional Bearer | Optional session-id transport map. |
+| `POST` | `/mcp` | None (keys are tool args) | **Primary** Streamable HTTP. Stateless. |
+| `POST` | `/mcp/session` | None | Optional session-id transport map. |
 
 Public paste URL is `https://mcp.veyanet.tech/mcp`.
 
@@ -77,12 +77,12 @@ This is what `https://mcp.veyanet.tech/mcp` hits.
 
 For **each** request, `src/http.ts` does:
 
-1. `extractBearer(req)` (may be null).
-2. `requestAuth.run({ bearer }, …)` so write tools can read the header later.
-3. `createMcpServer(cfg)` — **new** tool registry every time.
-4. `StreamableHTTPServerTransport` with `sessionIdGenerator: undefined` (no session id).
-5. `server.connect(transport)` then `transport.handleRequest(req, res, req.body)`.
-6. On `res.close`, close transport and server.
+1. `createMcpServer(cfg)` — **new** tool registry every time.
+2. `StreamableHTTPServerTransport` with `sessionIdGenerator: undefined` (no session id).
+3. `server.connect(transport)` then `transport.handleRequest(req, res, req.body)`.
+4. On `res.close`, close transport and server.
+
+Writes take `apiKey` and `payerPrivateKey` as **tool arguments**, not HTTP Bearer.
 
 Why stateless? Public paste URL, many clients, no sticky sessions required. In-process Boundnet policy (`veya_set_tool_policy`) lives only for that request’s process lifetime — and because the **server object is discarded**, in-process policy does **not** survive across requests on `POST /mcp`. Hosted Boundnet (`veya_boundnet_invoke`) is the product API table; that **does** persist.
 
@@ -126,11 +126,12 @@ Shape (fields from code):
 |-------|---------|
 | `status` | `"ok"` if the MCP process is up (not a fleet check) |
 | `service` | `@veyanet/mcp` |
-| `version` | `1.1.0` (from `MCP_SERVICE_VERSION`) |
+| `version` | `1.2.1` (from `MCP_SERVICE_VERSION`) |
 | `publicMcpUrl` | From `PUBLIC_MCP_URL` env |
 | `chainId` | Configured pin (should be `46630`) |
 | `contractAddress` | `Veya.sol` |
-| `writesEnabled` | `true` only if API key **and** relayer key exist |
+| `writesEnabled` | `true` (user-paid write tools registered) |
+| `operatorRelayerWrites` | `false` (user-paid writes never use the host relayer) |
 | `sealed` | `"AES-256-GCM (not FHE)"` (exact health string from the process) |
 | `settlement` | `"Robinhood Chain testnet 46630"` |
 
@@ -152,11 +153,11 @@ Landing may mention whether writes are enabled on **this** process. It must not 
 |--------|--------------|-----|
 | `Content-Type: application/json` | Client | Express JSON parser |
 | `Accept: application/json, text/event-stream` | Client | Streamable HTTP may SSE |
-| `Authorization: Bearer …` | Client | MCP write tools only |
+| `Authorization: Bearer …` | unused for user-paid writes | leftover header; writes use tool `apiKey` |
 | `mcp-session-id` | Client | Only `/mcp/session` |
 | `Origin` | Browsers | CORS (see below) |
 
-Product JWTs are **not** this `Authorization` header on `/mcp` for session tools. They are `sessionToken` inside the tool arguments. MCP then attaches Bearer toward the product API.
+Product API keys are tool argument `apiKey`. MCP then attaches `X-Api-Key` toward the product API.
 
 ---
 
