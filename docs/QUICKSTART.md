@@ -28,14 +28,14 @@ From zero to a verified chain ping using **public** VEYA surfaces: the paste URL
 | Product API | `https://api.veyanet.tech` |
 | TypeScript library | `@veyanet/sdk` on npm |
 
-You need Node only if you install the SDK. Claude/Cursor users need neither Node nor a key.
+You need Node only if you install the SDK. Claude/Cursor users need no key to **read**. Product writes need a site API key. On-chain writes need **your** testnet ETH.
 
 ```mermaid
 flowchart LR
   A["Paste MCP URL"] --> B["veya_describe"]
   B --> C["veya_ping_chain"]
   C --> D["veya_verify_transaction"]
-  D --> E["Optional guest login"]
+  D --> E["Optional product apiKey"]
 ```
 
 ---
@@ -71,7 +71,7 @@ You should see:
 - Contract `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`
 - Sealed = **AES-256-GCM**
 - Settlement = Robinhood testnet **46630**
-- Writes need Bearer **when enabled** (public host usually off)
+- Writes need a product API key **and your funded wallet** (not the hosted relayer)
 - Fleet belongs to the product API; unreachable capacity fails closed
 
 ### Step 3 — Live chain ping
@@ -97,24 +97,23 @@ This is `GET https://api.veyanet.tech/health`. A **`degraded`** body usually mea
 
 ---
 
-## 3. Part 2 — Optional guest Use path
+## 3. Part 2 — Product API key (writes)
 
-> Call `veya_guest_login`. Then call `veya_list_environments` with the returned token as `sessionToken`.
+Mint `veya_dev_…` or `veya_live_…` on the product site after wallet login. Guests cannot mint keys.
 
-Guest is **Use-only**:
+> Call `veya_list_environments` with `apiKey` set to that key.
 
-| Allowed | Not allowed (403) |
-|---------|-------------------|
-| List showcase / Use scope | Create environment |
-| List / anchor content proofs | Deploy agent |
-| | Protected Build execution |
-| | Boundnet Build invoke |
+Create environment is an API row (no gas). On-chain writes (`veya_store_commitment`, `veya_register_environment`, `veya_anchor_proof`) need the same key **plus** your wallet private key (`payerPrivateKey` or `VEYA_PAYER_PRIVATE_KEY` on a self-hosted MCP).
 
-403 is policy, not a broken MCP.
+If the wallet has no ETH:
 
-To Build, you need a **wallet JWT** from the product API (`/auth/nonce` + `/auth/verify`). MCP has no wallet popup.
+```text
+You don't have testnet tokens. Please get them for the transaction.
+```
 
-Guest stamps are a shared demo Use path. They are not the official token-customer story.
+`veya_guest_login` still lists Use rooms. Guest is **not** a write credential.
+
+To Build rooms you need a **product API key** from a wallet login. MCP has no wallet popup.
 
 ---
 
@@ -163,7 +162,7 @@ veya-mcp
 
 This starts **Streamable HTTP** on `PORT` (default 8788). Point a local client at `http://127.0.0.1:8788/mcp` for your own tests. After TLS, advertise the public HTTPS URL. See [DEPLOYMENT.md](./DEPLOYMENT.md) and [CONFIGURATION.md](./CONFIGURATION.md).
 
-Leave `MCP_API_KEY` empty unless you intend Bearer writes on **that** process.
+Set `VEYA_PAYER_PRIVATE_KEY` to **your** testnet wallet if this process will send chain writes. Prefer that over pasting the key into a tool argument.
 
 ---
 
@@ -175,9 +174,9 @@ Leave `MCP_API_KEY` empty unless you intend Bearer writes on **that** process.
 | Health ok, ping fails | Robinhood RPC |
 | Describe ok, guest fails | Product API |
 | API health `degraded` | Fleet on API host |
-| Create environment 403 | Guest is not Build |
-| Write tools missing | Public host, writes off — expected |
-| Write Unauthorized | Need Bearer `MCP_API_KEY` on a writes-enabled host |
+| Create environment refused | Guest JWT is not a product API key |
+| Write: apiKey required | Pass `veya_dev_` / `veya_live_` from the product site |
+| Write: no testnet tokens | Fund **your** wallet on Robinhood testnet 46630 |
 
 More: [VERIFICATION.md](./VERIFICATION.md).
 
@@ -188,5 +187,5 @@ More: [VERIFICATION.md](./VERIFICATION.md).
 - [TOOLS.md](./TOOLS.md) — every tool, arguments, what it does **not** do  
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — pictures of layers and trust  
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
-- [AUTHENTICATION.md](./AUTHENTICATION.md) — Bearer vs session  
+- [AUTHENTICATION.md](./AUTHENTICATION.md) — product key vs your wallet  
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — MCP vs SDK  
