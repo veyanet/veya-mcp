@@ -27,7 +27,7 @@ You need **public MCP**, optionally **`@veyanet/sdk`**, and the **product API** 
 | Understand **every tool** (what it does, args, returns) | [TOOLS.md](./TOOLS.md) |
 | See layers, sequence charts, trust, failures | [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | Know HTTP paths, SSE, CORS, stateless `/mcp` | [TRANSPORT.md](./TRANSPORT.md) |
-| Know Bearer vs guest JWT vs relayer key | [AUTHENTICATION.md](./AUTHENTICATION.md) |
+| Know product key vs your wallet | [AUTHENTICATION.md](./AUTHENTICATION.md) |
 | Self-host env vars | [CONFIGURATION.md](./CONFIGURATION.md) |
 | Put TLS in front of Node | [DEPLOYMENT.md](./DEPLOYMENT.md) |
 | Prove it as an auditor | [VERIFICATION.md](./VERIFICATION.md) |
@@ -52,14 +52,14 @@ flowchart TB
 
 | Item | Value |
 |------|-------|
-| npm | `@veyanet/mcp` **1.1.0** |
-| SDK | `@veyanet/sdk` **^1.2.0** |
+| npm | `@veyanet/mcp` **1.2.1** |
+| SDK | `@veyanet/sdk` **^1.2.1** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Product API | `https://api.veyanet.tech` |
 | Chain | Robinhood testnet **46630** |
 | Contract | `Veya.sol` `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
 | Sealed | AES-256-GCM |
-| Writes on public host | Usually **off** |
+| Writes | User-paid (product `apiKey` + your wallet) |
 
 ---
 
