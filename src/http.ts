@@ -5,13 +5,12 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import {
   loadConfig,
-  writesEnabled,
+  operatorRelayerWritesEnabled,
   MCP_SERVICE_NAME,
   MCP_SERVICE_VERSION,
   type McpServiceConfig,
 } from "./config.js";
-import { extractBearer } from "./auth.js";
-import { createMcpServer, requestAuth } from "./server.js";
+import { createMcpServer } from "./server.js";
 import { renderLandingHtml } from "./landingPage.js";
 
 export function createHttpApp(cfg: McpServiceConfig = loadConfig()) {
@@ -38,7 +37,8 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()) {
       publicMcpUrl: cfg.publicMcpUrl,
       chainId: cfg.chainId,
       contractAddress: cfg.contractAddress,
-      writesEnabled: writesEnabled(cfg),
+      writesEnabled: true,
+      operatorRelayerWrites: operatorRelayerWritesEnabled(cfg),
       sealed: "AES-256-GCM (not FHE)",
       settlement: "Robinhood Chain testnet 46630",
     });
@@ -46,75 +46,69 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()) {
 
   // Stateless Streamable HTTP — paste URL into Claude / Cursor (POST /mcp)
   app.post("/mcp", async (req: Request, res: Response) => {
-    const bearer = extractBearer(req);
-    await requestAuth.run({ bearer }, async () => {
-      try {
-        const server = createMcpServer(cfg);
-        const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: undefined,
+    try {
+      const server = createMcpServer(cfg);
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      });
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+      res.on("close", () => {
+        void transport.close();
+        void server.close();
+      });
+    } catch (err) {
+      console.error("[veyanet/mcp] POST /mcp", err);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: "2.0",
+          error: { code: -32603, message: "Internal server error" },
+          id: null,
         });
-        await server.connect(transport);
-        await transport.handleRequest(req, res, req.body);
-        res.on("close", () => {
-          void transport.close();
-          void server.close();
-        });
-      } catch (err) {
-        console.error("[veyanet/mcp] POST /mcp", err);
-        if (!res.headersSent) {
-          res.status(500).json({
-            jsonrpc: "2.0",
-            error: { code: -32603, message: "Internal server error" },
-            id: null,
-          });
-        }
       }
-    });
+    }
   });
 
   // Optional stateful path for clients that send MCP-Session-Id
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   app.post("/mcp/session", async (req: Request, res: Response) => {
-    const bearer = extractBearer(req);
-    await requestAuth.run({ bearer }, async () => {
-      try {
-        const sessionId = req.header("mcp-session-id") || undefined;
-        if (sessionId && sessions.has(sessionId)) {
-          await sessions.get(sessionId)!.handleRequest(req, res, req.body);
-          return;
-        }
-        if (!sessionId && isInitializeRequest(req.body)) {
-          const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: (id) => {
-              sessions.set(id, transport);
-            },
-          });
-          transport.onclose = () => {
-            if (transport.sessionId) sessions.delete(transport.sessionId);
-          };
-          const server = createMcpServer(cfg);
-          await server.connect(transport);
-          await transport.handleRequest(req, res, req.body);
-          return;
-        }
-        res.status(400).json({
+    try {
+      const sessionId = req.header("mcp-session-id") || undefined;
+      if (sessionId && sessions.has(sessionId)) {
+        await sessions.get(sessionId)!.handleRequest(req, res, req.body);
+        return;
+      }
+      if (!sessionId && isInitializeRequest(req.body)) {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (id) => {
+            sessions.set(id, transport);
+          },
+        });
+        transport.onclose = () => {
+          if (transport.sessionId) sessions.delete(transport.sessionId);
+        };
+        const server = createMcpServer(cfg);
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+        return;
+      }
+      res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "No valid MCP session" },
+        id: null,
+      });
+    } catch (err) {
+      console.error("[veyanet/mcp] POST /mcp/session", err);
+      if (!res.headersSent) {
+        res.status(500).json({
           jsonrpc: "2.0",
-          error: { code: -32000, message: "No valid MCP session" },
+          error: { code: -32603, message: "Internal server error" },
           id: null,
         });
-      } catch (err) {
-        console.error("[veyanet/mcp] POST /mcp/session", err);
-        if (!res.headersSent) {
-          res.status(500).json({
-            jsonrpc: "2.0",
-            error: { code: -32603, message: "Internal server error" },
-            id: null,
-          });
-        }
       }
-    });
+    }
   });
 
   app.get("/", (_req, res) => {
@@ -129,6 +123,6 @@ export function startHttpServer(cfg: McpServiceConfig = loadConfig()) {
   return app.listen(cfg.port, cfg.host, () => {
     console.log(`[veyanet/mcp] listening on http://${cfg.host}:${cfg.port}`);
     console.log(`[veyanet/mcp] MCP POST ${cfg.publicMcpUrl} (local /mcp)`);
-    console.log(`[veyanet/mcp] writesEnabled=${writesEnabled(cfg)}`);
+    console.log(`[veyanet/mcp] userPaidWrites=true operatorRelayerWrites=${operatorRelayerWritesEnabled(cfg)}`);
   });
 }
