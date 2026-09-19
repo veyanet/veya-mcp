@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServiceConfig } from "../config.js";
-import { apiRequest, toolError, toolJson } from "../api.js";
+import { apiRequest, toolError, toolJson, toolApiResult } from "../api.js";
 import { createReadClient, parseHexBytes } from "../sdk.js";
 
 export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig): void {
@@ -11,7 +11,7 @@ export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig):
     {},
     async () => {
       try {
-        return toolJson(await apiRequest(cfg, "/public/stats"));
+        return toolApiResult(await apiRequest(cfg, "/public/stats"));
       } catch (err) {
         return toolError(err);
       }
@@ -31,7 +31,7 @@ export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig):
         if (limit !== undefined) q.set("limit", String(limit));
         if (offset !== undefined) q.set("offset", String(offset));
         const suffix = q.toString() ? `?${q}` : "";
-        return toolJson(await apiRequest(cfg, `/public/agents${suffix}`));
+        return toolApiResult(await apiRequest(cfg, `/public/agents${suffix}`));
       } catch (err) {
         return toolError(err);
       }
@@ -44,7 +44,7 @@ export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig):
     { id: z.string().min(1) },
     async ({ id }) => {
       try {
-        return toolJson(await apiRequest(cfg, `/public/agents/${encodeURIComponent(id)}`));
+        return toolApiResult(await apiRequest(cfg, `/public/agents/${encodeURIComponent(id)}`));
       } catch (err) {
         return toolError(err);
       }
@@ -64,7 +64,7 @@ export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig):
         if (limit !== undefined) q.set("limit", String(limit));
         if (offset !== undefined) q.set("offset", String(offset));
         const suffix = q.toString() ? `?${q}` : "";
-        return toolJson(await apiRequest(cfg, `/public/certificates${suffix}`));
+        return toolApiResult(await apiRequest(cfg, `/public/certificates${suffix}`));
       } catch (err) {
         return toolError(err);
       }
@@ -77,7 +77,7 @@ export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig):
     { id: z.string().min(1) },
     async ({ id }) => {
       try {
-        return toolJson(await apiRequest(cfg, `/public/certificates/${encodeURIComponent(id)}`));
+        return toolApiResult(await apiRequest(cfg, `/public/certificates/${encodeURIComponent(id)}`));
       } catch (err) {
         return toolError(err);
       }
@@ -90,7 +90,7 @@ export function registerRegistryTools(server: McpServer, cfg: McpServiceConfig):
     { id: z.string().min(1) },
     async ({ id }) => {
       try {
-        return toolJson(await apiRequest(cfg, `/public/executions/${encodeURIComponent(id)}`));
+        return toolApiResult(await apiRequest(cfg, `/public/executions/${encodeURIComponent(id)}`));
       } catch (err) {
         return toolError(err);
       }
