@@ -1,22 +1,58 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServiceConfig } from "../config.js";
-import { apiRequest, toolError, toolJson } from "../api.js";
+import { apiRequest, toolError, toolJson, toolApiResult } from "../api.js";
+import { MINT_API_KEY_HINT, requireProductApiKey, resolveCredential } from "../credentials.js";
+import { mapWriteError, prepareUserPayer } from "../payer.js";
+import { createWriteClient, parseHexBytes } from "../sdk.js";
+
+const apiKey = z
+  .string()
+  .min(10)
+  .optional()
+  .describe("Product API key (veya_dev_… / veya_live_…). Mint on the product site. Guest JWT is not a write credential.");
 
 const sessionToken = z
   .string()
   .min(10)
   .optional()
-  .describe("Product API JWT from guest or wallet login. Build writes return 403 for guests.");
+  .describe("Optional guest JWT for Use listing only. Prefer apiKey.");
+
+const payerPrivateKey = z
+  .string()
+  .min(10)
+  .optional()
+  .describe("User wallet private key that pays gas. Prefer VEYA_PAYER_PRIVATE_KEY on a self-hosted MCP.");
+
+function missingKey() {
+  return toolError(new Error("apiKey required"));
+}
 
 export function registerProductTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_guest_login",
-    "Create a guest session on the product API (Use-only). Requires API relayer configured on the API host.",
+    "Create a guest session on the product API (Use listing only). Guest cannot mint API keys or write from MCP.",
     {},
     async () => {
       try {
-        return toolJson(await apiRequest(cfg, "/auth/guest", { method: "POST" }));
+        return toolApiResult(await apiRequest(cfg, "/auth/guest", { method: "POST" }));
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
+    "veya_account",
+    "Return the wallet bound to a product API key",
+    { apiKey, sessionToken },
+    async ({ apiKey: key, sessionToken: jwt }) => {
+      try {
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
+        return toolApiResult(
+          await apiRequest(cfg, "/v1/account", { apiKey: credential, sessionToken: credential }),
+        );
       } catch (err) {
         return toolError(err);
       }
@@ -25,17 +61,15 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_list_environments",
-    "List environments for a session (guest sees showcase / Use scope)",
-    { sessionToken },
-    async ({ sessionToken: token }) => {
+    "List environments for a product API key (guest JWT sees showcase / Use scope only)",
+    { apiKey, sessionToken },
+    async ({ apiKey: key, sessionToken: jwt }) => {
       try {
-        if (!token) {
-          return toolJson({
-            error: "sessionToken required",
-            hint: "Call veya_guest_login first, or pass a wallet JWT",
-          });
-        }
-        return toolJson(await apiRequest(cfg, "/v1/environments", { sessionToken: token }));
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
+        return toolApiResult(
+          await apiRequest(cfg, "/v1/environments", { apiKey: credential, sessionToken: credential }),
+        );
       } catch (err) {
         return toolError(err);
       }
@@ -45,13 +79,15 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
   server.tool(
     "veya_get_environment",
     "Get one environment by id",
-    { sessionToken, environmentId: z.string().min(1) },
-    async ({ sessionToken: token, environmentId }) => {
+    { apiKey, sessionToken, environmentId: z.string().min(1) },
+    async ({ apiKey: key, sessionToken: jwt, environmentId }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
+        return toolApiResult(
           await apiRequest(cfg, `/v1/environments/${encodeURIComponent(environmentId)}`, {
-            sessionToken: token,
+            apiKey: credential,
+            sessionToken: credential,
           }),
         );
       } catch (err) {
@@ -62,19 +98,20 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_create_environment",
-    "Create environment (Build). Guests receive 403 by design.",
+    "Create environment in the product API (Build). Does not spend gas. Guests and non-keys are refused.",
     {
+      apiKey,
       sessionToken,
       name: z.string().min(1),
       type: z.enum(["research", "governance", "treasury", "contributor", "protocol", "desci"]),
     },
-    async ({ sessionToken: token, name, type }) => {
+    async ({ apiKey: key, sessionToken: jwt, name, type }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const productKey = requireProductApiKey(key, jwt);
+        return toolApiResult(
           await apiRequest(cfg, "/v1/environments", {
             method: "POST",
-            sessionToken: token,
+            apiKey: productKey,
             body: { name, type },
           }),
         );
@@ -87,13 +124,15 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
   server.tool(
     "veya_list_agents",
     "List agents in an environment",
-    { sessionToken, environmentId: z.string().min(1) },
-    async ({ sessionToken: token, environmentId }) => {
+    { apiKey, sessionToken, environmentId: z.string().min(1) },
+    async ({ apiKey: key, sessionToken: jwt, environmentId }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
+        return toolApiResult(
           await apiRequest(cfg, `/v1/environments/${encodeURIComponent(environmentId)}/agents`, {
-            sessionToken: token,
+            apiKey: credential,
+            sessionToken: credential,
           }),
         );
       } catch (err) {
@@ -104,21 +143,23 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_deploy_agent",
-    "Deploy an agent (Build). Guests receive 403 by design.",
+    "Deploy an agent (Build). Product API key required. Guests receive 403 by design.",
     {
+      apiKey,
       sessionToken,
       environmentId: z.string().min(1),
       type: z.string().min(1),
+      agentKind: z.string().min(3).max(64).optional(),
       permissionConfig: z.record(z.unknown()).optional(),
     },
-    async ({ sessionToken: token, environmentId, type, permissionConfig }) => {
+    async ({ apiKey: key, sessionToken: jwt, environmentId, type, agentKind, permissionConfig }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const productKey = requireProductApiKey(key, jwt);
+        return toolApiResult(
           await apiRequest(cfg, `/v1/environments/${encodeURIComponent(environmentId)}/agents`, {
             method: "POST",
-            sessionToken: token,
-            body: { type, permissionConfig },
+            apiKey: productKey,
+            body: { type, agentKind: agentKind ?? type, permissionConfig },
           }),
         );
       } catch (err) {
@@ -131,19 +172,21 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
     "veya_list_api_memory",
     "List memory entries via product API for an environment",
     {
+      apiKey,
       sessionToken,
       environmentId: z.string().min(1),
       scope: z.enum(["environment", "agent", "session"]).optional(),
     },
-    async ({ sessionToken: token, environmentId, scope }) => {
+    async ({ apiKey: key, sessionToken: jwt, environmentId, scope }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
         const q = scope ? `?scope=${scope}` : "";
-        return toolJson(
+        return toolApiResult(
           await apiRequest(
             cfg,
             `/v1/environments/${encodeURIComponent(environmentId)}/memory${q}`,
-            { sessionToken: token },
+            { apiKey: credential, sessionToken: credential },
           ),
         );
       } catch (err) {
@@ -155,15 +198,16 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
   server.tool(
     "veya_list_executions",
     "List executions for an environment via product API",
-    { sessionToken, environmentId: z.string().min(1) },
-    async ({ sessionToken: token, environmentId }) => {
+    { apiKey, sessionToken, environmentId: z.string().min(1) },
+    async ({ apiKey: key, sessionToken: jwt, environmentId }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
+        return toolApiResult(
           await apiRequest(
             cfg,
             `/v1/environments/${encodeURIComponent(environmentId)}/executions`,
-            { sessionToken: token },
+            { apiKey: credential, sessionToken: credential },
           ),
         );
       } catch (err) {
@@ -174,8 +218,9 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_run_protected_execution",
-    "Run protected execution via product API (Build). Guests receive 403 by design.",
+    "Run protected execution via product API (Build). Product API key required.",
     {
+      apiKey,
       sessionToken,
       environmentId: z.string().min(1),
       agentId: z.string().min(1),
@@ -186,14 +231,14 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
     },
     async (args) => {
       try {
-        if (!args.sessionToken) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const productKey = requireProductApiKey(args.apiKey, args.sessionToken);
+        return toolApiResult(
           await apiRequest(
             cfg,
             `/v1/environments/${encodeURIComponent(args.environmentId)}/executions/protected`,
             {
               method: "POST",
-              sessionToken: args.sessionToken,
+              apiKey: productKey,
               body: {
                 agentId: args.agentId,
                 eventType: args.eventType,
@@ -214,6 +259,7 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
     "veya_boundnet_invoke",
     "Invoke a Boundnet / coordination tool via product API (policy gated)",
     {
+      apiKey,
       sessionToken,
       environmentId: z.string().min(1),
       agentId: z.string().min(1),
@@ -222,14 +268,14 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
     },
     async (args) => {
       try {
-        if (!args.sessionToken) return toolJson({ error: "sessionToken required" });
-        return toolJson(
+        const productKey = requireProductApiKey(args.apiKey, args.sessionToken);
+        return toolApiResult(
           await apiRequest(
             cfg,
             `/v1/environments/${encodeURIComponent(args.environmentId)}/boundnet/invoke`,
             {
               method: "POST",
-              sessionToken: args.sessionToken,
+              apiKey: productKey,
               body: {
                 agentId: args.agentId,
                 toolName: args.toolName,
@@ -246,12 +292,15 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_list_proofs",
-    "List Use-mode proof anchors for the session",
-    { sessionToken },
-    async ({ sessionToken: token }) => {
+    "List Use-mode proof anchors for the account",
+    { apiKey, sessionToken },
+    async ({ apiKey: key, sessionToken: jwt }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(await apiRequest(cfg, "/v1/proofs", { sessionToken: token }));
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return missingKey();
+        return toolApiResult(
+          await apiRequest(cfg, "/v1/proofs", { apiKey: credential, sessionToken: credential }),
+        );
       } catch (err) {
         return toolError(err);
       }
@@ -260,24 +309,55 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_anchor_proof",
-    "Anchor a content proof via product API (guest Use path when API allows)",
+    "Anchor a content proof on Veya.sol from YOUR wallet (apiKey + payerPrivateKey). Does not use the hosted relayer.",
     {
+      apiKey,
       sessionToken,
+      payerPrivateKey,
       label: z.string().min(1),
       content: z.string().min(1),
+      environmentId: z.string().min(1).optional(),
     },
-    async ({ sessionToken: token, label, content }) => {
+    async ({ apiKey: key, sessionToken: jwt, payerPrivateKey: payer, label, content, environmentId }) => {
       try {
-        if (!token) return toolJson({ error: "sessionToken required" });
-        return toolJson(
-          await apiRequest(cfg, "/v1/proofs/anchor", {
-            method: "POST",
-            sessionToken: token,
-            body: { label, content },
-          }),
+        const productKey = requireProductApiKey(key, jwt);
+        const prepared = await prepareUserPayer(cfg, productKey, payer);
+        const client = createWriteClient(cfg, prepared.privateKey);
+        const hash = await client.hashBlake3(`${label}\n${content}`);
+
+        let environmentUuidHex = "0".repeat(32);
+        if (environmentId) {
+          const plan = await apiRequest(
+            cfg,
+            `/v1/chain/environments/${encodeURIComponent(environmentId)}/registration`,
+            { apiKey: productKey },
+          );
+          const body = plan.body as { registration?: { environmentUuid?: string } };
+          if (plan.httpStatus >= 400 || !body.registration?.environmentUuid) {
+            return toolApiResult(plan);
+          }
+          environmentUuidHex = body.registration.environmentUuid;
+        }
+
+        const txHash = await client.requireEvm().storeCommitment(
+          parseHexBytes(environmentUuidHex, 16),
+          parseHexBytes(hash, 32),
         );
+        return toolJson({
+          txHash,
+          explorer: client.explorerFor(txHash),
+          from: prepared.address,
+          hash,
+          label,
+        });
       } catch (err) {
-        return toolError(err);
+        if (err instanceof Error && err.message === "apiKey required") {
+          return missingKey();
+        }
+        if (err instanceof Error && err.message === MINT_API_KEY_HINT) {
+          return toolError(err);
+        }
+        return toolError(mapWriteError(err));
       }
     },
   );
@@ -288,7 +368,7 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
     { signature: z.string().min(1) },
     async ({ signature }) => {
       try {
-        return toolJson(
+        return toolApiResult(
           await apiRequest(cfg, `/api/verify/${encodeURIComponent(signature)}`),
         );
       } catch (err) {
