@@ -1,7 +1,6 @@
 import {
   MCP_SERVICE_NAME,
   MCP_SERVICE_VERSION,
-  writesEnabled,
   type McpServiceConfig,
 } from "./config.js";
 
@@ -14,7 +13,6 @@ export const CANONICAL_PUBLIC_MCP_URL = "https://mcp.veyanet.tech/mcp";
  */
 export function renderLandingHtml(cfg: McpServiceConfig): string {
   const publicUrl = CANONICAL_PUBLIC_MCP_URL;
-  const writes = writesEnabled(cfg);
 
   return `<!doctype html>
 <html lang="en">
@@ -162,9 +160,8 @@ export function renderLandingHtml(cfg: McpServiceConfig): string {
     <h1>VEYA</h1>
     <p class="pkg">${MCP_SERVICE_NAME}@${MCP_SERVICE_VERSION}</p>
     <p class="lead">
-      Paste one public URL into Claude or Cursor. Full agent surface over Streamable HTTP —
-      chain verify, PQ crypto, registry, product sessions, optional writes.
-      Settlement is Robinhood testnet. Sealed is AES-256-GCM, not FHE.
+      Paste one public URL into Claude or Cursor. Reads are free.
+      Product tools need a site API key. On-chain writes spend YOUR testnet ETH.
     </p>
 
     <div class="paste" title="Public Streamable HTTP endpoint">
@@ -188,7 +185,11 @@ export function renderLandingHtml(cfg: McpServiceConfig): string {
         (no invented quorum). Strangers do not run private validator ports.
       </p>
       <p>
-        Writes ${writes ? "are <strong>enabled</strong> on this process (Bearer required)." : "are <strong>disabled</strong> here until <code>MCP_API_KEY</code> + relayer are set."}
+        <strong>Reads</strong> need no key. <strong>Product tools</strong> need a
+        <code>veya_dev_</code> / <code>veya_live_</code> key from the product site.
+        <strong>On-chain writes</strong> spend <em>your</em> wallet — not the hosted relayer.
+        Empty wallet: you don't have testnet tokens; please get them for the transaction
+        (<a href="https://faucet.testnet.chain.robinhood.com/">Robinhood testnet faucet</a>).
         Guest Build on the product API stays <strong>403</strong> by design.
       </p>
     </div>
