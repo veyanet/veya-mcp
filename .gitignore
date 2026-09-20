@@ -13,3 +13,5 @@ coverage/
 .turbo/
 
 _rebuild_history.ps1
+
+.npmrc
