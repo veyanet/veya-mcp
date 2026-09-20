@@ -6,7 +6,7 @@
   **The official Model Context Protocol server for post-quantum agent tools, chain verification, sealed-execution honesty, and protocol settlement on Robinhood Chain.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.0.0-cb3837.svg?style=flat-edge)](./package.json)
+  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.1-cb3837.svg?style=flat-edge)](./package.json)
   [![Node Version](https://img.shields.io/badge/Node-%3E%3D20-green.svg?style=flat-edge)](https://nodejs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-edge)](https://www.typescriptlang.org/)
   [![MCP Endpoint](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9.svg?style=flat-edge)](https://mcp.veyanet.tech/mcp)
@@ -25,20 +25,20 @@ VEYA solves this security gap by establishing client-side cryptographic boundari
 
 ### The VEYA MCP Server
 
-The `@veyanet/mcp` package is the canonical **Model Context Protocol** surface for VEYA. It speaks Streamable HTTP so Claude, Cursor, and other MCP clients can paste a single URL and invoke VEYA tools without cloning `@veyanet/sdk` or running a local stdio binary. Cryptography, chain-id guards, and receipt parsing are delegated to `@veyanet/sdk`; this package owns the HTTP transport, tool registration, Bearer write gates, and the public honesty card.
+The `@veyanet/mcp` package is the canonical **Model Context Protocol** surface for VEYA — the full agent-facing picture, not a teaser subset. It speaks Streamable HTTP so Claude, Cursor, and other MCP clients can paste a single URL and invoke crypto, fleet, registry, product API, and user-paid on-chain write tools without cloning `@veyanet/sdk`. Cryptography, chain-id guards, and receipt parsing are delegated to `@veyanet/sdk`; this package owns the HTTP transport, tool registration, product `apiKey` forwarding, and the public honesty card.
 
 By connecting an MCP client to `@veyanet/mcp`, you enable the following core capabilities:
-*   **Paste-URL Access**: Connect via `https://mcp.veyanet.tech/mcp` (Streamable HTTP) with no local process for strangers.
-*   **Public Read Tools**: Describe the stack honestly, ping Robinhood Chain, compute BLAKE3 digests, verify `Veya.sol` transactions, and probe `https://api.veyanet.tech/health`.
-*   **Fail-Closed Writes**: Optional on-chain tools (`storeCommitment`, `attestExecution`, `registerEnvironment`) require `MCP_API_KEY` + relayer key and `Authorization: Bearer`.
-*   **SDK-Backed Settlement**: Every chain call uses `@veyanet/sdk` (`VeyaClient` / `EvmAnchor`) with chain id **46630** pins.
-*   **Operator Stdio Sibling**: Local stdio MCP remains at `veya-anchor/packages/mcp/` for process-local operators; public clients use this HTTP MCP.
+*   **Paste-URL Access**: Connect via `https://mcp.veyanet.tech/mcp` (Streamable HTTP).
+*   **Public Tools**: Describe the stack, ping Robinhood Chain, BLAKE3, verify `Veya.sol` txs, PQ crypto, registry, product sessions via `https://api.veyanet.tech`.
+*   **User-paid writes**: On-chain tools need a product API key (`veya_dev_` / `veya_live_`) and **your** funded testnet wallet. The hosted relayer is not the gas payer.
+*   **SDK-Backed Settlement**: Chain calls use `@veyanet/sdk` with chain id **46630** pins.
+*   **Backend-owned fleet**: Consensus validators and sealed capacity belong to the product API (`https://api.veyanet.tech`).
 
-| Surface | Path in tree | How users connect |
-|---------|--------------|-------------------|
-| **MCP (primary)** | `robinhood/hosted-mcp/` (`@veyanet/mcp`) | Paste `https://mcp.veyanet.tech/mcp` |
-| Stdio (operators) | `veya-anchor/packages/mcp/` | Local `veya-mcp` process |
-| SDK | `robinhood/sdk/` (`@veyanet/sdk`) | Library import |
+| Surface | How users connect |
+|---------|-------------------|
+| **Public MCP** | Paste `https://mcp.veyanet.tech/mcp` |
+| **Product API** | `https://api.veyanet.tech` (via MCP tools or direct HTTPS) |
+| **SDK** | `npm install @veyanet/sdk` |
 
 ---
 
@@ -73,13 +73,13 @@ The design of `@veyanet/mcp` is governed by the paradigm of **Thin Protocol Gate
 This core philosophy is implemented through three primary architectural pillars:
 
 ### 1. Streamable HTTP as the Public Contract
-Strangers and agent runtimes connect with a single URL. The server implements MCP Streamable HTTP (`POST /mcp`) using `@modelcontextprotocol/sdk`. No stdio binary is required for the public path. Operators who need a local process keep the stdio sibling under Anchor.
+Strangers and agent runtimes connect with a single URL. The server implements MCP Streamable HTTP (`POST /mcp`) using `@modelcontextprotocol/sdk`.
 
-### 2. Fail-Closed Write Surface
-On-chain write tools are registered only when **both** `MCP_API_KEY` and `VEYA_RELAYER_PRIVATE_KEY` (or `VEYA_DEPLOYER_PRIVATE_KEY`) are present. Every write invocation still requires `Authorization: Bearer <MCP_API_KEY>`. If either key is missing, the server exposes public reads plus `veya_writes_status` — it does not silently accept chain mutations.
+### 2. User-paid write surface
+On-chain write tools are always registered. Every write needs a product `apiKey` and your `payerPrivateKey` (or `VEYA_PAYER_PRIVATE_KEY`). `msg.sender` is **your** address. An empty wallet returns: `You don't have testnet tokens. Please get them for the transaction.`
 
 ### 3. Honesty Before Marketing
-`GET /health` and `veya_describe` state Robinhood **testnet 46630**, sealed = **AES-256-GCM** (not FHE), not mainnet, and whether writes are enabled. The MCP will not invent quorum, claim TEE hardware attestation, or present `Veya.sol` as an ERC-20.
+`GET /health` and `veya_describe` state Robinhood **testnet 46630**, sealed = **AES-256-GCM**, and whether writes are enabled. Quorum is matching hashes; unreachable nodes return `consensus_reached: false`. `Veya.sol` is a protocol contract.
 
 ---
 
@@ -98,9 +98,9 @@ flowchart TB
         Landing["GET /"]
         Health["GET /health"]
         PostMcp["POST /mcp"]
-        Auth{"Authorization: Bearer MCP_API_KEY?"}
+        Auth{"product apiKey + your wallet?"}
         PublicTools["Public tools"]
-        WriteTools["Write tools"]
+        WriteTools["User-paid write tools"]
     end
 
     subgraph SdkBoundary["@veyanet/sdk"]
@@ -120,7 +120,7 @@ flowchart TB
     ToolCall --> PostMcp
     PostMcp --> Auth
     Auth -->|"no key / public tools"| PublicTools
-    Auth -->|"Bearer match + keys set"| WriteTools
+    Auth -->|"apiKey + funded payer"| WriteTools
     PublicTools --> ReadClient
     PublicTools -->|"veya_api_health"| ApiHealth
     WriteTools --> EvmAnchor
@@ -134,35 +134,35 @@ flowchart TB
 
 ## 📦 Installation & Environmental Requirements
 
-### Runtime Compatibility & Prerequisites
-The `@veyanet/mcp` server is engineered for modern Node.js and ESM builds via `tsup`:
+### Strangers (recommended)
 
-*   **Node.js Runtime**: Version **20.0.0** or higher (`engines.node >= 20`).
-*   **TypeScript**: Version **5.0** or higher targeting `ES2022` / `ESNext` for local development.
-*   **Sibling SDK**: `@veyanet/sdk` resolved via `file:../sdk` — build the SDK before installing this package.
-*   **Network**: Outbound HTTPS to Robinhood Chain RPC (and optionally `api.veyanet.tech`).
+Paste into Claude / Cursor (**Streamable HTTP**):
 
-### Package Installation (Monorepo)
-
-```bash
-cd robinhood/sdk
-npm install
-npm run build
-
-cd ../hosted-mcp
-npm install
-npm run build
+```text
+https://mcp.veyanet.tech/mcp
 ```
 
-Start the server:
+Optional TypeScript library:
 
 ```bash
-npm start
-# → http://127.0.0.1:8788/mcp
-# → http://127.0.0.1:8788/health
+npm install @veyanet/sdk
 ```
 
-Binary entry after build: `veya-mcp` → `./dist/cli.js`.
+### npm package (optional)
+
+```bash
+npm install -g @veyanet/mcp
+veya-mcp
+# or: npx -y @veyanet/mcp
+```
+
+Starts a Streamable HTTP server. After TLS, point clients at your **public HTTPS** connector. Keep `PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp` as the product paste URL in docs and landing. See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
+
+### Requirements
+
+*   **Node.js** ≥ **20**
+*   Outbound HTTPS to Robinhood RPC and `https://api.veyanet.tech`
+*   Dependency: `@veyanet/sdk` from **npm**
 
 ---
 
@@ -196,10 +196,13 @@ app.listen(cfg.port, cfg.host);
 | `ROBINHOOD_CHAIN_ID` | Network chain ID | `46630` |
 | `ROBINHOOD_EXPLORER_URL` | Block explorer base URL | Public testnet explorer |
 | `VEYA_CONTRACT_ADDRESS` | `Veya.sol` protocol contract | Testnet deploy address |
-| `VEYA_API_URL` | Product API base for `veya_api_health` | `https://api.veyanet.tech` |
-| `MCP_API_KEY` | Bearer secret for write tools | unset → reads only |
-| `VEYA_RELAYER_PRIVATE_KEY` | Payer key for on-chain writes | unset → reads only |
-| `VEYA_DEPLOYER_PRIVATE_KEY` | Alternate payer env name | same role as relayer |
+| `VEYA_API_URL` | Product API (health, registry, sessions, fleet capacity) | `https://api.veyanet.tech` |
+| `VEYA_VALIDATOR_NODES` | Backend fleet URLs (server-side; not stranger loopback) | configured per host |
+| `VEYA_SEALED_NODE_URL` | Sealed capacity URL (backend-owned) | configured per host |
+| `VEYA_PAYER_PRIVATE_KEY` | Your wallet for on-chain writes | unset → pass `payerPrivateKey` per call |
+| `MCP_API_KEY` | Operator relayer path only | unset on the public host |
+| `VEYA_RELAYER_PRIVATE_KEY` | Unused operator-relayer leftover | unset on the public host |
+| `VEYA_DEPLOYER_PRIVATE_KEY` | Unused operator-relayer leftover | unset on the public host |
 | `CORS_ORIGIN` | Comma-separated Origin allowlist | empty = reject credentialed browser Origin |
 | `NODE_ENV` | Runtime mode | `development` |
 
@@ -215,12 +218,12 @@ Paste into a custom MCP connector using **Streamable HTTP** transport:
 https://mcp.veyanet.tech/mcp
 ```
 
-No API key is required for public tools. Write tools only appear or succeed when the server operator enabled keys and the client sends Bearer auth.
+No API key is required for public tools. Product tools need `apiKey`. On-chain writes need that key plus **your** funded testnet wallet.
 
-### Claude CLI (local development)
+### Claude CLI
 
 ```bash
-claude mcp add veya --transport http http://127.0.0.1:8788/mcp
+claude mcp add veya --transport http https://mcp.veyanet.tech/mcp
 ```
 
 ### Cursor IDE
@@ -231,17 +234,15 @@ Settings → MCP → Add custom MCP server / connector → URL:
 https://mcp.veyanet.tech/mcp
 ```
 
-For local verification use `http://127.0.0.1:8788/mcp` against `npm start`.
-
 ### Landing Page
 
-`GET https://mcp.veyanet.tech/` (or local `/`) returns a minimal HTML page with the paste URL, health link, and honesty line (testnet 46630 · AES-256-GCM · not mainnet).
+`GET https://mcp.veyanet.tech/` returns a brand landing that advertises **`https://mcp.veyanet.tech/mcp`**. Health: `https://mcp.veyanet.tech/health`. Product docs: `https://veyanet.tech/mcp`. Product API: `https://api.veyanet.tech`.
 
 ---
 
 ## 🧩 Core Tools Overview
 
-The `@veyanet/mcp` tool surface is split into public reads and authenticated writes. Each tool returns MCP text content (typically JSON) for agent consumption.
+`@veyanet/mcp` **1.2.1** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads are free. Product tools need a site API key. On-chain writes spend **your** wallet.
 
 ### 1. Honesty & Discovery
 
@@ -250,14 +251,14 @@ Tool: veya_describe
 Args: (none)
 ```
 
-Returns the honesty card: package name `@veyanet/mcp`, public URL, settlement (chain id, contract, RPC, explorer), product API, sealed = AES-256-GCM (not FHE), mainnet deferred to Phase 3, write policy, and pointer to the stdio sibling.
+Returns the honesty card: package name `@veyanet/mcp`, public URL, settlement, product API, sealed = AES-256-GCM, write policy.
 
 ```text
 Tool: veya_writes_status
 Args: (none)
 ```
 
-Present when write tools are **disabled**. Reports that `MCP_API_KEY` + `VEYA_RELAYER_PRIVATE_KEY` must be set to enable on-chain tools.
+Always registered. Explains user-paid writes: product `apiKey` + your wallet. Empty wallet message is included.
 
 ### 2. Chain Read & Verify
 
@@ -301,19 +302,15 @@ Args: (none)
 
 ### 5. Authenticated On-Chain Writes
 
-Enabled only when **both** server env keys exist. Client must send:
-
-```http
-Authorization: Bearer <MCP_API_KEY>
-```
+Always available. `msg.sender` is **your** wallet, not the hosted relayer.
 
 | Tool | Primary args | On-chain method |
 |------|----------------|-----------------|
-| `veya_store_commitment` | `environmentUuidHex`, `commitmentHex` | `storeCommitment` |
-| `veya_attest_execution` | `environmentUuidHex`, `blake3HashHex`, `mldsaSigHex` | `attestExecution` |
-| `veya_register_environment` | `environmentUuidHex`, `pqPubkeyHashHex`, `envType` | `registerEnvironment` |
+| `veya_store_commitment` | `apiKey`, `payerPrivateKey`, `environmentUuidHex`, `commitmentHex` | `storeCommitment` |
+| `veya_attest_execution` | `apiKey`, `payerPrivateKey`, `environmentUuidHex`, `blake3HashHex`, `mldsaSigHex` | `attestExecution` |
+| `veya_register_environment` | `apiKey`, `payerPrivateKey`, `environmentId` or `environmentUuidHex` | `registerEnvironment` |
 
-Writes go through SDK `EvmAnchor`, which calls `ensureRobinhoodChain()` before submit so a mis-pointed RPC cannot silently land on another EVM.
+Writes go through SDK `EvmAnchor`, which calls `ensureRobinhoodChain()` before submit so a mis-pointed RPC cannot silently land on another EVM. If the wallet has no ETH: `You don't have testnet tokens. Please get them for the transaction.`
 
 ---
 
@@ -330,9 +327,11 @@ Writes go through SDK `EvmAnchor`, which calls `ensureRobinhoodChain()` before s
 ### B. Developer path (local process)
 
 ```bash
-cd robinhood/sdk && npm install && npm run build
-cd ../hosted-mcp && npm install && npm run build
+git clone https://github.com/veyanet/veya-mcp.git
+cd veya-mcp
+npm install
 cp .env.example .env   # do not commit .env
+npm run build
 npm start
 ```
 
@@ -345,13 +344,13 @@ npm run smoke
 
 Smoke starts an in-process server, performs MCP initialize + `tools/list`, then calls `veya_describe` and `veya_ping_chain` against live RPC.
 
-### C. Operator write path (funded testnet key)
+### C. User write path (your funded testnet wallet)
 
-1. Set `MCP_API_KEY` to a long random secret.
-2. Set `VEYA_RELAYER_PRIVATE_KEY` to a funded Robinhood **testnet** key.
-3. Restart the process; confirm `/health` shows `"writesEnabled": true`.
-4. From an MCP client that can set headers, call write tools with `Authorization: Bearer <MCP_API_KEY>`.
-5. Confirm the returned `txHash` on the Robinhood testnet explorer.
+1. Mint `veya_dev_` / `veya_live_` on the product site.
+2. Set `VEYA_PAYER_PRIVATE_KEY` to **that same wallet** (self-host) or pass `payerPrivateKey` on the tool.
+3. Call `veya_store_commitment` (or `veya_anchor_proof`) with `apiKey`.
+4. Confirm `from` in the result is your address, and open the explorer `txHash`.
+5. If the wallet is empty you get: `You don't have testnet tokens. Please get them for the transaction.`
 
 ---
 
@@ -370,14 +369,15 @@ Smoke starts an in-process server, performs MCP initialize + `tools/list`, then 
 `CORS_ORIGIN` is an allowlist. Empty allowlist rejects credentialed browser `Origin` values. Server-to-server MCP clients (no Origin) are unaffected.
 
 ### Auth Model
-*   Public tools: no Bearer required.
-*   Write tools: Bearer must equal `MCP_API_KEY`; relayer key must be configured; mismatch throws and fails the tool call.
-*   Relayer private keys never appear in tool responses or `/health`.
+*   Public tools: no key.
+*   Product tools: `apiKey` from the product site (`X-Api-Key` toward `api.veyanet.tech`).
+*   Write tools: same `apiKey` plus **your** `payerPrivateKey`. `from` is your address.
+*   Private keys never appear in `/health` or success payloads.
 
 ### Failure Modes
 *   Wrong RPC chain id on writes → SDK `CHAIN_MISMATCH` (fail closed).
-*   Missing write keys → write tools not registered (or `veya_writes_status` only).
-*   Bad Bearer → unauthorized error on write tools.
+*   Missing `apiKey` → `{ "error": "apiKey required" }`.
+*   Unfunded payer → `You don't have testnet tokens. Please get them for the transaction.`
 *   Downstream API degraded → `veya_api_health` returns honest body; MCP itself can still be `status: ok`.
 
 ---
@@ -423,7 +423,7 @@ Health probe:
 ```bash
 curl -s https://mcp.veyanet.tech/health | jq .
 # or local:
-curl -s http://127.0.0.1:8788/health | jq .
+curl -s https://mcp.veyanet.tech/health | jq .
 ```
 
 Expected honesty fields include `service: "@veyanet/mcp"`, `chainId: 46630`, `sealed` mentioning `AES-256-GCM`, and `writesEnabled` boolean.
@@ -447,8 +447,8 @@ This README serves as the entry point. For detailed operational and integrator m
 | **[Deployment Guide](./docs/DEPLOYMENT.md)** | Operations | nginx, env, systemd, TLS for `mcp.veyanet.tech`. |
 | **[Configuration Reference](./docs/CONFIGURATION.md)** | Config | Full environment variable cascade and defaults. |
 | **[HTTP Transport](./docs/TRANSPORT.md)** | Protocol | Streamable HTTP, sessions, CORS, Accept headers. |
-| **[Authentication & Writes](./docs/AUTHENTICATION.md)** | Security | Bearer model, key custody, fail-closed writes. |
-| **[SDK Relationship](./docs/SDK_BRIDGE.md)** | Integration | What MCP calls in `@veyanet/sdk` and what it does not. |
+| **[Authentication & Writes](./docs/AUTHENTICATION.md)** | Security | Product API key vs your wallet; testnet tokens. |
+| **[SDK Relationship](./docs/SDK_BRIDGE.md)** | Integration | What MCP calls in `@veyanet/sdk` and the product API. |
 | **[Changelog](./CHANGELOG.md)** | History | Package version history. |
 | **[Security Policy](./SECURITY.md)** | Security | Disclosure and secrets hygiene. |
 
@@ -457,28 +457,28 @@ This README serves as the entry point. For detailed operational and integrator m
 ## ❓ Frequently Asked Questions (FAQ)
 
 ### 1. Do I need an API key to try VEYA MCP?
-**No** for public tools (`veya_describe`, `veya_ping_chain`, `veya_hash_blake3`, `veya_verify_transaction`, `veya_api_health`). Write tools require the server operator to enable keys and the client to send `Authorization: Bearer <MCP_API_KEY>`.
+**No** for public tools (`veya_describe`, `veya_ping_chain`, `veya_hash_blake3`, `veya_verify_transaction`, `veya_api_health`). Product rooms and on-chain writes need a `veya_dev_` / `veya_live_` key from the product site. On-chain writes also need **your** funded testnet wallet.
 
 ### 2. Does the MCP store or transmit my private keys to clients?
-**No.** Relayer / deployer keys stay in server process memory for write tools only. They are never returned in tool payloads or `/health`. `MCP_API_KEY` is a shared Bearer secret for authorized writers — treat it like a production password.
+**No** in tool results or `/health`. If you pass `payerPrivateKey` to the public HTTP URL, that host holds it for the call — prefer self-host with `VEYA_PAYER_PRIVATE_KEY`. Never use a mainnet key.
 
-### 3. Is Veya.sol an ERC-20 token?
-**No.** `Veya.sol` is a protocol contract for environments, agents, commitments, spending limits (wei), nullifiers, and attestations. It does not implement ERC-20.
+### 3. What is Veya.sol?
+`Veya.sol` is a protocol contract for environments, agents, commitments, spending limits (wei), nullifiers, and attestations.
 
-### 4. Is sealed execution FHE or hardware TEE?
-**No.** Product honesty is **AES-256-GCM** sealed-node cryptography. Not live FHE/TFHE (later phase). Not Intel SGX / AWS Nitro as the product path.
+### 4. What is sealed execution?
+Product honesty is **AES-256-GCM** sealed-node cryptography (software process boundary).
 
 ### 5. How is MCP different from `@veyanet/sdk`?
 The SDK is a TypeScript library you import. MCP is a network service that exposes selected SDK capabilities as MCP tools over Streamable HTTP so agents can paste a URL.
 
-### 6. Where is the stdio MCP?
-Local operator stdio lives at `veya-anchor/packages/mcp/`. Public Claude / Cursor users should use `https://mcp.veyanet.tech/mcp`.
+### 6. How do I connect?
+Paste `https://mcp.veyanet.tech/mcp`. Consensus and sealed capacity belong to the product API (`https://api.veyanet.tech`). Use `@veyanet/sdk` from npm for TypeScript.
 
 ### 7. What happens if Robinhood RPC is down?
-`veya_ping_chain` and verify tools fail with transport / RPC errors. `/health` can still report the MCP process as up while chain tools fail — operators should monitor both.
+`veya_ping_chain` and verify tools fail with transport / RPC errors. Check `https://mcp.veyanet.tech/health` and the Robinhood RPC independently.
 
 ### 8. Can I point this server at another chain id?
-Only if you change `ROBINHOOD_CHAIN_ID`, RPC, explorer, and contract together. SDK write guards will reject chain id mismatch. Mainnet is not a VEYA settlement claim until Phase 3.
+Only if you change `ROBINHOOD_CHAIN_ID`, RPC, explorer, and contract together. SDK write guards will reject chain id mismatch. Mainnet is not a VEYA settlement claim until it ships.
 
 ---
 
@@ -486,9 +486,9 @@ Only if you change `ROBINHOOD_CHAIN_ID`, RPC, explorer, and contract together. S
 
 ### Contribution Standards
 We welcome contributions to `@veyanet/mcp`. Pull requests must preserve security integrity:
-*   **Fail-Closed Writes**: Do not register on-chain tools without both API key and relayer key; do not accept writes without Bearer match.
+*   **User-paid writes**: Do not send chain txs from a hosted relayer when the caller has a product API key; `msg.sender` must be the user's wallet.
 *   **Honesty Enforcement**: Do not add tool copy that claims FHE, mainnet settlement, ERC-20, or invented quorum.
-*   **Secret Hygiene**: Reject changes that log `MCP_API_KEY`, relayer keys, or dump `.env` into docs.
+*   **Secret Hygiene**: Reject changes that log `apiKey`, `payerPrivateKey`, or dump `.env` into docs.
 *   **SDK Boundary**: Prefer calling `@veyanet/sdk` over re-implementing hashing, verify, or `EvmAnchor` inside tool handlers.
 
 ### Vulnerability Disclosure Policy
