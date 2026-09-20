@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { MCP_SERVICE_NAME, MCP_SERVICE_VERSION, type McpServiceConfig } from "../config.js";
 import { createReadClient } from "../sdk.js";
+import { toolApiResult } from "../api.js";
 
 export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
@@ -27,8 +28,9 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
               productApi: cfg.apiUrl,
               sealed: "AES-256-GCM sealed-node (not FHE; TFHE is planned)",
               mainnet: "Not a VEYA settlement claim (planned)",
-              writes: "Require Authorization: Bearer <MCP_API_KEY> when enabled on the server",
-              toolSurface: "full (crypto, fleet, registry, product API, optional writes)",
+              writes:
+                "On-chain writes need a product API key (veya_dev_ / veya_live_) and YOUR funded testnet wallet. The hosted relayer is not the gas payer.",
+              toolSurface: "full (crypto, fleet, registry, product API, user-paid writes)",
               fleet:
                 "Consensus/sealed capacity is backend-owned via the product API (api.veyanet.tech). Unreachable capacity fails closed — no invented quorum.",
               publicPasteUrl: "https://mcp.veyanet.tech/mcp",
@@ -103,14 +105,7 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
         signal: AbortSignal.timeout(8000),
       });
       const body = await res.json().catch(() => ({}));
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ httpStatus: res.status, body }, null, 2),
-          },
-        ],
-      };
+      return toolApiResult({ httpStatus: res.status, body });
     },
   );
 }
