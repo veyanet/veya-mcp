@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.2.1] — 2026-09-20
+
+### Added
+- Product API client (`src/api.ts`) for session tools against `https://api.veyanet.tech` with `X-Api-Key`.
+- Shared credential helpers (`src/credentials.ts`) and user-paid payer checks (`src/payer.ts`) for on-chain writes.
+- Public landing page (`src/landingPage.ts`) advertising `https://mcp.veyanet.tech/mcp` and user-paid write rules.
+- Tool surfaces: PQ crypto, public registry, fleet/sealed, and product-console tools (`src/tools/{crypto,registry,fleet,product}.ts`).
+- Verification scripts: `scripts/verify-full.ts`, `scripts/verify-live-workflow.ts`, `scripts/verify-user-all.ts`, `scripts/verify-live.ts`.
+
+### Changed
+- Depends on `@veyanet/sdk@^1.2.2` so write failures align with SDK `UNFUNDED_PAYER` / `NO_TESTNET_TOKENS` and faucet export.
+- Service version, health `version`, README badges, and `veya_describe` report **1.2.1**.
+- Write tools stay user-paid: gated on product API keys; empty or unfunded payer returns exactly `You don't have testnet tokens. Please get them for the transaction.`
+- Health / HTTP honesty fields distinguish user-paid writes from operator relayer writes (`writesEnabled`, `operatorRelayerWrites`).
+- Docs refreshed across architecture, auth, configuration, deployment, network pin, quickstart, SDK bridge, tools, transport, and verification for the 1.2.x public paste path.
+- Smoke script and config tests cover unfunded-payer mapping and the 1.2.1 health version.
+
+### Fixed
+- Product API 4xx/5xx and missing `apiKey` continue to surface as MCP `isError` so clients do not treat failed writes as success.
+
+---
+
+## [1.2.0] — 2026-09-17
+
+### Changed
+- Product tools take `apiKey` (`veya_dev_` / `veya_live_`) and forward `X-Api-Key` to `https://api.veyanet.tech`.
+- On-chain writes are **user-paid**: `msg.sender` is the caller's wallet (`payerPrivateKey` / `VEYA_PAYER_PRIVATE_KEY`), not a hosted relayer.
+- Empty or unfunded payer returns exactly: `You don't have testnet tokens. Please get them for the transaction.`
+- Guest JWT is listing-only from MCP. Writes require a product API key minted after wallet login.
+- `veya_anchor_proof` uses SDK `storeCommitment` from the user wallet.
+- `veya_register_environment` can confirm the tx on the product API when `environmentId` is passed (retries; `consoleSynced` reports whether the console saw it).
+- `GET /v1/account` on the product API returns the wallet bound to a key (MCP `veya_account`).
+- HTTP 4xx/5xx from the product API and missing `apiKey` return MCP `isError` so clients do not treat failures as success.
+
+---
+
+## [1.1.1] — 2026-09-14
+
+### Changed
+- Docs expanded for the public paste URL: full tool catalog, architecture charts, transport, auth, and verification.
+- Tool copy distinguishes MCP-local `~/.veya` memory from product-console proofs.
+
+---
+
 ## [1.1.0] — 2026-09-11
 
 ### Added
@@ -35,7 +79,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Fail-closed writes when keys unset or Bearer mismatches.
 - Honesty fields refuse FHE / mainnet / ERC-20 claims.
 - CORS allowlist for credentialed browser Origins; empty allowlist rejects unknown Origins.
-
-### Notes
-- Monorepo directory name `robinhood/hosted-mcp/` is layout-only next to the stdio MCP; the published product name is **VEYA MCP** / `@veyanet/mcp`.
-- Stdio operator MCP remains `veya-anchor/packages/mcp/`.
