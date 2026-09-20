@@ -65,6 +65,8 @@ async function main() {
     const names = tools.map((t) => t.name);
     assert.ok(names.includes("veya_ping_chain"));
     assert.ok(names.includes("veya_describe"));
+    assert.ok(names.includes("veya_store_commitment"));
+    assert.ok(names.includes("veya_writes_status"));
     assert.ok(names.includes("veya_verify_transaction"));
     assert.ok(names.includes("veya_hash_blake3"));
     console.log("[smoke] tools", names.join(", "));
