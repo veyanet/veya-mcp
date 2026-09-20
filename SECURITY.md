@@ -26,8 +26,8 @@
 
 | Version | Supported |
 |---------|-----------|
+| 1.2.x | Yes |
 | 1.1.x | Yes |
-| 1.0.x | Best effort (upgrade to 1.1.x) |
 
 npm package: `@veyanet/mcp`. Public host: `https://mcp.veyanet.tech/mcp`.
 
@@ -38,9 +38,9 @@ npm package: `@veyanet/mcp`. Public host: `https://mcp.veyanet.tech/mcp`.
 | Secret | Storage |
 |--------|---------|
 | `.env` | Server only (gitignored) |
-| `MCP_API_KEY` | Server env / secret manager |
-| `VEYA_RELAYER_PRIVATE_KEY` | Server env / secret manager |
-| `VEYA_DEPLOYER_PRIVATE_KEY` | Server env / secret manager |
+| Product `apiKey` | Tool argument; forwarded as `X-Api-Key` |
+| `VEYA_PAYER_PRIVATE_KEY` | Self-hosted env / secret manager (preferred) |
+| `payerPrivateKey` tool arg | Caller custody — testnet only; prefer env |
 | ML-DSA private keys from `veya_pq_keygen` | Caller custody — not logs, not git |
 
 `.env.example` is the only environment template that belongs in git. It must not contain real keys.
@@ -53,8 +53,9 @@ Guest JWTs are product-API sessions. Do not treat them as unique human accounts.
 
 ## Trust model (short)
 
-- Public tools have **no** MCP Bearer. That is intentional. Chain **writes** must still fail without `MCP_API_KEY` + relayer + matching `Authorization` header.
-- Product `sessionToken` is a **different** secret from `MCP_API_KEY`. Mixing them is a configuration bug.
+- Public tools have **no** key. That is intentional. Chain **writes** must still fail without a product `apiKey` and a funded user `payerPrivateKey`.
+- Product `apiKey` is a **different** secret from a guest JWT. Mixing them is a configuration bug.
+- Guest JWT is listing-only from MCP.
 - Fleet URLs default to loopback so a colocated process can reach validators. Those ports must **not** be on the public firewall.
 - Sealed execution is **AES-256-GCM**. Honesty bugs that claim otherwise are in-scope as misleading security statements.
 - `Veya.sol` is a protocol contract. Docs that invent a token address are in-scope as honesty violations.
@@ -67,9 +68,9 @@ Details: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md), [docs/AUTHENTICATION.md
 
 Report these against `@veyanet/mcp`:
 
-- Bypass of the Bearer write gate (unauthenticated `storeCommitment` / `attestExecution` / `registerEnvironment` / `register_pq_onchain` / `anchor_pq_attestation` when writes are enabled)
-- Write tools registered or callable when `MCP_API_KEY` or relayer key is missing
-- Leakage of relayer private key or `MCP_API_KEY` via tool output, logs, `/health`, or landing HTML
+- Bypass of the product-key write gate (on-chain write without a `veya_dev_` / `veya_live_` key)
+- On-chain write that spends a hosted relayer when the caller used a product API key (user must be `msg.sender`)
+- Leakage of `payerPrivateKey` or `apiKey` via tool output, logs, `/health`, or landing HTML
 - CORS misconfiguration that exfiltrates credentialed browser sessions
 - Chain settlement against a mismatched chain id when writes are enabled (MCP failing to use SDK `ensureRobinhoodChain` / wrong pins)
 - Honesty violations that cause clients to believe FHE, mainnet, or ERC-20 are live
@@ -111,11 +112,11 @@ Acknowledgment target: **72 hours**. Coordinated disclosure before public detail
 
 ## Operator hardening checklist
 
-- Prefer **read-only** public MCP; private instance for writes
+- Public MCP serves free reads plus user-paid writes (product `apiKey` + user wallet). Do not enable a hosted relayer on the public URL
 - `chmod 600` on `.env`
-- Forward `Authorization` through TLS proxy only to the Node process
 - Do not expose `7701–7703` / `7800` on the public internet
-- Monitor the explorer for unexpected relayer txs if writes are on
-- Rotate Bearer and relayer key on suspicion
+- Monitor the explorer for unexpected txs from **user** wallets that called this host
+- Rotate product API keys and payer keys on suspicion
 - Keep `PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp` so humans are never told to paste a private bind
 - JSON body cap is 1 MB — keep proxy limits aligned; rate-limit `/mcp` at the edge
+- Prefer self-host for `VEYA_PAYER_PRIVATE_KEY` instead of sending a private key to the public URL
