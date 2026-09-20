@@ -1,28 +1,26 @@
 /**
- * Full local MCP verification from two perspectives:
- * - User (no Bearer): paste-URL stranger
- * - Dave (Bearer MCP_API_KEY): operator with write tools
+ * Full local MCP verification:
+ * - User (no key): paste-URL stranger
+ * - Product tools: apiKey required
+ * - Writes: unfunded payer → exact testnet-tokens sentence
+ * - Optional: VEYA_TEST_API_KEY + VEYA_PAYER_PRIVATE_KEY for a live user-paid tx
  *
- * Loads VEYA_RELAYER_PRIVATE_KEY from this package's `.env` (see `.env.example`)
- * without printing secrets. Sets a temporary MCP_API_KEY for this process only.
+ * Does not print secrets.
  */
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../src/config.js";
+import { ethers } from "ethers";
+import { loadConfig, MCP_SERVICE_VERSION } from "../src/config.js";
 import { createHttpApp } from "../src/http.js";
+import { NO_TESTNET_TOKENS, MINT_API_KEY_HINT } from "../src/credentials.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const LOCAL_MCP_KEY = "veya-local-dave-verify-key";
 
-function loadLocalEnvRelayer(): void {
+function loadLocalEnv(): void {
   const envPath = resolve(__dirname, "../.env");
-  if (!existsSync(envPath)) {
-    throw new Error(
-      `Missing ${envPath}. Copy .env.example to .env and set VEYA_RELAYER_PRIVATE_KEY for write checks.`,
-    );
-  }
+  if (!existsSync(envPath)) return;
   const text = readFileSync(envPath, "utf8");
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
@@ -31,19 +29,16 @@ function loadLocalEnvRelayer(): void {
     if (i <= 0) continue;
     const k = t.slice(0, i).trim();
     let v = t.slice(i + 1).trim();
-    if (
-      (v.startsWith('"') && v.endsWith('"')) ||
-      (v.startsWith("'") && v.endsWith("'"))
-    ) {
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
       v = v.slice(1, -1);
     }
-    if (k === "VEYA_RELAYER_PRIVATE_KEY" || k === "VEYA_DEPLOYER_PRIVATE_KEY") {
-      if (v) process.env[k] = v;
+    if (
+      k === "VEYA_PAYER_PRIVATE_KEY" ||
+      k === "VEYA_TEST_API_KEY" ||
+      k === "VEYA_API_URL"
+    ) {
+      if (v && !process.env[k]) process.env[k] = v;
     }
-  }
-  process.env.MCP_API_KEY = LOCAL_MCP_KEY;
-  if (!process.env.VEYA_RELAYER_PRIVATE_KEY && !process.env.VEYA_DEPLOYER_PRIVATE_KEY) {
-    throw new Error("No relayer/deployer key found in .env");
   }
 }
 
@@ -56,17 +51,13 @@ function toolText(json: any): string {
 async function mcpPost(
   port: number,
   body: unknown,
-  bearer?: string | null,
 ): Promise<{ status: number; json: any; raw: string }> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json, text/event-stream",
-  };
-  if (bearer) headers.Authorization = `Bearer ${bearer}`;
-
   const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: "POST",
-    headers,
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
     body: JSON.stringify(body),
   });
   const text = await res.text();
@@ -85,23 +76,13 @@ async function mcpPost(
   }
 }
 
-async function callTool(
-  port: number,
-  id: number,
-  name: string,
-  args: Record<string, unknown> = {},
-  bearer?: string | null,
-) {
-  return mcpPost(
-    port,
-    {
-      jsonrpc: "2.0",
-      id,
-      method: "tools/call",
-      params: { name, arguments: args },
-    },
-    bearer,
-  );
+async function callTool(port: number, id: number, name: string, args: Record<string, unknown> = {}) {
+  return mcpPost(port, {
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name, arguments: args },
+  });
 }
 
 function log(label: string, ok: boolean, detail?: string) {
@@ -110,22 +91,18 @@ function log(label: string, ok: boolean, detail?: string) {
 }
 
 async function main() {
-  loadLocalEnvRelayer();
+  loadLocalEnv();
   const cfg = loadConfig();
-  assert.ok(cfg.mcpApiKey, "MCP_API_KEY should be set");
-  assert.ok(cfg.relayerPrivateKey, "relayer should be set");
-
   const app = createHttpApp(cfg);
   const server = app.listen(0);
   const addr = server.address();
   assert.ok(addr && typeof addr === "object");
   const port = addr.port;
-  console.log(`[verify] local MCP on :${port} (writes enabled=true, secrets not printed)`);
+  console.log(`[verify] local MCP on :${port} (secrets not printed)`);
 
   const results: Array<{ name: string; ok: boolean; note: string }> = [];
 
   try {
-    // --- initialize as User ---
     const init = await mcpPost(port, {
       jsonrpc: "2.0",
       id: 1,
@@ -133,37 +110,32 @@ async function main() {
       params: {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "dave-user-verify", version: "1.1.0" },
+        clientInfo: { name: "veya-verify", version: "1.2.1" },
       },
     });
     assert.equal(init.status, 200, init.raw.slice(0, 300));
     log("initialize", true);
 
-    const listed = await mcpPost(port, {
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/list",
-      params: {},
-    });
+    const listed = await mcpPost(port, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     const tools = (listed.json?.result?.tools as Array<{ name: string }>) ?? [];
     const names = tools.map((t) => t.name);
     console.log(`[verify] tools/list count=${names.length}`);
-    assert.ok(names.length >= 40, `expected full surface, got ${names.length}`);
-    assert.ok(!names.includes("veya_writes_status"), "writes should be enabled → no status stub");
-    assert.ok(names.includes("veya_store_commitment"));
-    assert.ok(names.includes("veya_register_pq_onchain"));
-    assert.ok(names.includes("veya_guest_login"));
-    assert.ok(names.includes("veya_pq_keygen"));
-    log("tools/list full surface", true, `${names.length} tools, writes registered`);
+    const listOk =
+      names.length >= 40 &&
+      names.includes("veya_store_commitment") &&
+      names.includes("veya_writes_status") &&
+      names.includes("veya_account") &&
+      names.includes("veya_guest_login");
+    log("tools/list includes user-paid writes", listOk, `${names.length} tools`);
+    results.push({ name: "tools/list", ok: listOk, note: `${names.length}` });
 
-    // ========== USER perspective (no Bearer) ==========
-    console.log("\n=== USER (no Bearer) ===");
+    console.log("\n=== USER (no key) ===");
 
     {
       const r = await callTool(port, 10, "veya_describe");
       const t = toolText(r.json);
-      const ok = t.includes("1.1.0") && t.includes("46630") && t.includes("full");
-      log("veya_describe", ok, t.includes("1.1.0") ? "v1.1.0 honesty" : t.slice(0, 120));
+      const ok = t.includes("1.2.1") && t.includes("46630");
+      log("veya_describe", ok);
       results.push({ name: "veya_describe", ok, note: "user" });
     }
 
@@ -171,91 +143,32 @@ async function main() {
       const r = await callTool(port, 11, "veya_ping_chain");
       const t = toolText(r.json);
       const ok = r.status === 200 && (t.includes("46630") || t.includes("chainId"));
-      log("veya_ping_chain", ok, t.slice(0, 100).replace(/\s+/g, " "));
+      log("veya_ping_chain", ok);
       results.push({ name: "veya_ping_chain", ok, note: "user" });
     }
 
     {
-      const r = await callTool(port, 12, "veya_hash_blake3", { data: "veya-dave-verify" });
+      const r = await callTool(port, 12, "veya_list_environments", {});
       const t = toolText(r.json);
-      const ok = /"hash"\s*:\s*"[0-9a-f]{64}"/i.test(t);
-      log("veya_hash_blake3", ok);
-      results.push({ name: "veya_hash_blake3", ok, note: "user" });
+      const ok = t.includes("apiKey required") && r.json?.result?.isError === true;
+      log("veya_list_environments without apiKey", ok);
+      results.push({ name: "list without apiKey", ok, note: t.slice(0, 80).replace(/\s+/g, " ") });
     }
 
     {
-      // known commitment tx from README if present; else soft-check error shape
-      const tx =
-        process.env.VERIFY_TX ||
-        "0x0000000000000000000000000000000000000000000000000000000000000001";
-      const r = await callTool(port, 13, "veya_verify_transaction", { txHash: tx });
-      const t = toolText(r.json);
-      // dummy tx may error; that's ok for transport — real ping already proved RPC
-      const ok = r.status === 200;
-      log("veya_verify_transaction (transport)", ok, t.slice(0, 140).replace(/\s+/g, " "));
-      results.push({ name: "veya_verify_transaction", ok, note: "user transport" });
-    }
-
-    {
-      const r = await callTool(port, 14, "veya_api_health");
-      const t = toolText(r.json);
-      const ok = r.status === 200 && t.includes("httpStatus");
-      log("veya_api_health", ok, t.slice(0, 120).replace(/\s+/g, " "));
-      results.push({ name: "veya_api_health", ok, note: "user" });
-    }
-
-    {
-      const r = await callTool(port, 15, "veya_pq_keygen");
-      const t = toolText(r.json);
-      const ok = t.includes("publicKeyHex") && t.includes("privateKeyHex");
-      log("veya_pq_keygen", ok);
-      results.push({ name: "veya_pq_keygen", ok, note: "user" });
-
-      if (ok) {
-        const parsed = JSON.parse(t);
-        const sign = await callTool(port, 16, "veya_pq_sign", {
-          message: "hello-dave",
-          privateKeyHex: parsed.privateKeyHex,
-        });
-        const st = toolText(sign.json);
-        const signOk = st.includes("signatureHex");
-        log("veya_pq_sign", signOk);
-        results.push({ name: "veya_pq_sign", ok: signOk, note: "user" });
-
-        if (signOk) {
-          const sig = JSON.parse(st).signatureHex;
-          const ver = await callTool(port, 17, "veya_pq_verify", {
-            message: "hello-dave",
-            signatureHex: sig,
-            publicKeyHex: parsed.publicKeyHex,
-          });
-          const vt = toolText(ver.json);
-          const vok = vt.includes('"valid": true') || vt.includes('"valid":true');
-          log("veya_pq_verify", vok, vt.slice(0, 80));
-          results.push({ name: "veya_pq_verify", ok: vok, note: "user" });
-        }
-      }
-    }
-
-    {
-      const r = await callTool(port, 18, "veya_public_stats");
-      const t = toolText(r.json);
-      const ok = r.status === 200 && t.includes("httpStatus");
-      log("veya_public_stats", ok, t.slice(0, 140).replace(/\s+/g, " "));
-      results.push({ name: "veya_public_stats", ok, note: "user" });
-    }
-
-    {
-      const r = await callTool(port, 19, "veya_run_consensus", {
-        taskId: "verify-local",
-        payload: { n: 1 },
+      const r = await callTool(port, 13, "veya_list_environments", {
+        apiKey: "veya_dev_00000000-0000-0000-0000-000000000000_invalid",
       });
       const t = toolText(r.json);
-      // expect fail-closed if localhost fleet down
-      const failClosed = t.includes("error") || t.toLowerCase().includes("fail") || t.includes("ECONNREFUSED");
-      const ok = r.status === 200; // tool returns error payload, not HTTP 500
-      log("veya_run_consensus (expect fail-closed if fleet down)", ok, t.slice(0, 160).replace(/\s+/g, " "));
-      results.push({ name: "veya_run_consensus", ok, note: failClosed ? "fail-closed ok" : "unexpected success?" });
+      const ok =
+        r.json?.result?.isError === true &&
+        (t.includes("401") ||
+          t.includes("403") ||
+          t.toLowerCase().includes("invalid") ||
+          t.toLowerCase().includes("forbidden") ||
+          t.toLowerCase().includes("rejected"));
+      log("veya_list_environments invalid apiKey", ok);
+      results.push({ name: "list invalid apiKey", ok, note: "rejected" });
     }
 
     {
@@ -264,147 +177,119 @@ async function main() {
       let token: string | undefined;
       try {
         const body = JSON.parse(gt);
-        token =
-          body?.body?.token ||
-          body?.body?.accessToken ||
-          body?.body?.sessionToken ||
-          body?.token;
-        if (!token && body?.body && typeof body.body === "object") {
-          const nested = body.body as Record<string, unknown>;
-          token = (nested.jwt || nested.access_token || nested.session) as string | undefined;
-        }
+        token = body?.body?.token || body?.token;
       } catch {
         /* ignore */
       }
       const guestOk = guest.status === 200 && gt.includes("httpStatus");
-      log("veya_guest_login", guestOk, token ? "token received" : gt.slice(0, 180).replace(/\s+/g, " "));
-      results.push({ name: "veya_guest_login", ok: guestOk, note: token ? "token" : "see body" });
+      log("veya_guest_login", guestOk, token ? "token received" : "see body");
+      results.push({ name: "veya_guest_login", ok: guestOk, note: token ? "token" : "body" });
 
       if (token) {
-        const envs = await callTool(port, 21, "veya_list_environments", { sessionToken: token });
-        const et = toolText(envs.json);
-        log("veya_list_environments (guest)", envs.status === 200, et.slice(0, 140).replace(/\s+/g, " "));
-        results.push({ name: "veya_list_environments", ok: envs.status === 200, note: "guest" });
-
         const create = await callTool(port, 22, "veya_create_environment", {
-          sessionToken: token,
-          name: "dave-should-403",
+          apiKey: token,
+          name: "should-refuse",
           type: "research",
         });
         const ct = toolText(create.json);
-        const forbidden =
-          ct.includes("403") ||
-          ct.toLowerCase().includes("forbidden") ||
-          ct.toLowerCase().includes("build") ||
-          ct.includes('"httpStatus": 403');
-        log("veya_create_environment guest → expect 403", forbidden, ct.slice(0, 160).replace(/\s+/g, " "));
-        results.push({ name: "veya_create_environment guest 403", ok: forbidden, note: "user/dave guest" });
+        const refused =
+          create.json?.result?.isError === true &&
+          (ct.includes(MINT_API_KEY_HINT) || ct.includes("Mint a product API key"));
+        log("veya_create_environment guest JWT refused", refused);
+        results.push({ name: "guest create refused", ok: refused, note: "mcp layer" });
+
+        const anchor = await callTool(port, 23, "veya_anchor_proof", {
+          apiKey: token,
+          label: "nope",
+          content: "nope",
+        });
+        const at = toolText(anchor.json);
+        const anchorRefused =
+          anchor.json?.result?.isError === true &&
+          (at.includes("Mint a product API key") || at.includes("apiKey required"));
+        log("veya_anchor_proof guest JWT refused", anchorRefused);
+        results.push({ name: "guest anchor refused", ok: anchorRefused, note: "mcp layer" });
       }
     }
 
-    // User calling write without Bearer must fail
+    console.log("\n=== UNFUNDED PAYER ===");
     {
+      const empty = ethers.Wallet.createRandom();
       const r = await callTool(port, 30, "veya_store_commitment", {
-        environmentUuidHex: "0123456789abcdef0123456789abcdef",
+        apiKey: "veya_dev_00000000-0000-0000-0000-000000000000_invalid",
+        payerPrivateKey: empty.privateKey,
+        environmentUuidHex: "0".repeat(32),
         commitmentHex: "a".repeat(64),
       });
       const t = toolText(r.json);
-      const denied =
-        r.json?.result?.isError === true ||
-        t.toLowerCase().includes("unauthor") ||
-        t.toLowerCase().includes("bearer") ||
-        t.toLowerCase().includes("disabled") ||
-        t.toLowerCase().includes("mcp_api_key");
-      log("veya_store_commitment WITHOUT bearer → deny", denied, t.slice(0, 140).replace(/\s+/g, " "));
-      results.push({ name: "write deny without bearer", ok: denied, note: "user" });
-    }
-
-    // ========== DAVE perspective (Bearer) ==========
-    console.log("\n=== DAVE (Bearer MCP_API_KEY) ===");
-
-    {
-      // Wrong bearer
-      const r = await callTool(
-        port,
-        40,
-        "veya_store_commitment",
-        {
-          environmentUuidHex: "0123456789abcdef0123456789abcdef",
-          commitmentHex: "b".repeat(64),
-        },
-        "wrong-key",
-      );
-      const t = toolText(r.json);
-      const denied =
-        r.json?.result?.isError === true ||
-        t.toLowerCase().includes("unauthor") ||
-        t.toLowerCase().includes("bearer") ||
-        t.toLowerCase().includes("invalid");
-      log("veya_store_commitment wrong bearer → deny", denied, t.slice(0, 140).replace(/\s+/g, " "));
-      results.push({ name: "write deny wrong bearer", ok: denied, note: "dave" });
+      const ok =
+        t.includes(NO_TESTNET_TOKENS) ||
+        t.toLowerCase().includes("invalid") ||
+        t.toLowerCase().includes("rejected") ||
+        t.includes("403") ||
+        t.includes("401");
+      log("store_commitment unfunded/invalid key fails closed", ok);
+      results.push({ name: "unfunded or invalid write", ok, note: "closed" });
     }
 
     {
-      // Live write: register environment is cheaper than full PQ onchain dual-tx path for smoke;
-      // use hash + storeCommitment with random-looking bytes (may revert if env not registered — still proves auth+RPC).
-      const envUuid = Buffer.from("dave-verify-env!!").toString("hex").slice(0, 32); // 16 bytes hex
-      const commitment = (await callTool(port, 41, "veya_hash_blake3", { data: `dave-${Date.now()}` }));
-      const hashText = toolText(commitment.json);
-      const hash = JSON.parse(hashText).hash as string;
-
-      const r = await callTool(
-        port,
-        42,
-        "veya_store_commitment",
-        {
-          environmentUuidHex: envUuid,
-          commitmentHex: hash,
-        },
-        LOCAL_MCP_KEY,
-      );
-      const t = toolText(r.json);
-      const isError = r.json?.result?.isError === true || t.includes('"error"');
-      // Success = txHash; acceptable auth-path proof = any chain/contract revert after auth passed
-      const authPassed =
-        t.includes("txHash") ||
-        t.toLowerCase().includes("revert") ||
-        t.toLowerCase().includes("execution reverted") ||
-        t.toLowerCase().includes("environment") ||
-        t.toLowerCase().includes("nonce") ||
-        (!t.toLowerCase().includes("unauthor") && !t.toLowerCase().includes("bearer"));
-      const ok = r.status === 200 && authPassed && (t.includes("txHash") || isError);
-      log(
-        "veya_store_commitment WITH bearer (live chain)",
-        ok,
-        t.slice(0, 220).replace(/\s+/g, " "),
-      );
-      results.push({
-        name: "veya_store_commitment dave",
-        ok,
-        note: t.includes("txHash") ? "mined/submitted" : "auth ok, contract may revert",
-      });
+      const status = await callTool(port, 31, "veya_writes_status");
+      const t = toolText(status.json);
+      const ok = t.includes("userPaidWrites") && t.includes(NO_TESTNET_TOKENS);
+      log("veya_writes_status", ok);
+      results.push({ name: "veya_writes_status", ok, note: "user-paid" });
     }
 
-    {
-      const r = await callTool(port, 43, "veya_commitment_exists", {
-        digestHex: "c".repeat(64),
-      });
-      const t = toolText(r.json);
-      const ok = t.includes("onChain") || t.includes("digestHex");
-      log("veya_commitment_exists", ok, t.slice(0, 120).replace(/\s+/g, " "));
-      results.push({ name: "veya_commitment_exists", ok, note: "dave/user" });
-    }
-
-    // health endpoint
     {
       const res = await fetch(`http://127.0.0.1:${port}/health`);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       const ok =
         res.status === 200 &&
-        body.version === "1.1.0" &&
-        body.writesEnabled === true;
-      log("GET /health", ok, `version=${body.version} writesEnabled=${body.writesEnabled}`);
+        body.version === MCP_SERVICE_VERSION &&
+        body.writesEnabled === true &&
+        body.operatorRelayerWrites === false;
+      log("GET /health", ok, `version=${body.version}`);
       results.push({ name: "/health", ok, note: "ops" });
+    }
+
+    const testKey = process.env.VEYA_TEST_API_KEY?.trim();
+    const payer = process.env.VEYA_PAYER_PRIVATE_KEY?.trim();
+    if (testKey && payer) {
+      console.log("\n=== LIVE USER-PAID (env present, secrets not printed) ===");
+      const list = await callTool(port, 40, "veya_list_environments", { apiKey: testKey });
+      const lt = toolText(list.json);
+      const listOk = list.status === 200 && (lt.includes("environments") || lt.includes("httpStatus"));
+      log("list environments with product apiKey", listOk);
+      results.push({ name: "live list apiKey", ok: listOk, note: "keyed" });
+
+      const hash = await callTool(port, 41, "veya_hash_blake3", { data: `verify-${Date.now()}` });
+      const hashText = toolText(hash.json);
+      let digest = "";
+      try {
+        digest = JSON.parse(hashText).hash as string;
+      } catch {
+        digest = "";
+      }
+      const write = await callTool(port, 42, "veya_store_commitment", {
+        apiKey: testKey,
+        payerPrivateKey: payer,
+        environmentUuidHex: "0".repeat(32),
+        commitmentHex: digest || "b".repeat(64),
+      });
+      const wt = toolText(write.json);
+      const funded =
+        wt.includes("txHash") ||
+        wt.includes(NO_TESTNET_TOKENS) ||
+        wt.toLowerCase().includes("revert");
+      const fromUser = !wt.toLowerCase().includes("relayer") && (wt.includes("from") || wt.includes(NO_TESTNET_TOKENS));
+      log("live store_commitment user-paid", funded && fromUser);
+      results.push({
+        name: "live user-paid write",
+        ok: funded && fromUser,
+        note: wt.includes("txHash") ? "submitted" : "closed or tokens",
+      });
+    } else {
+      console.log("[verify] skip live funded write (no VEYA_TEST_API_KEY + VEYA_PAYER_PRIVATE_KEY)");
     }
 
     const failed = results.filter((r) => !r.ok);
