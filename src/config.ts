@@ -9,6 +9,7 @@ export type McpServiceConfig = {
   apiUrl: string;
   mcpApiKey: string | null;
   relayerPrivateKey: string | null;
+  payerPrivateKey: string | null;
   validatorNodes: string[];
   sealedNodeUrl: string;
   corsOrigins: string[];
@@ -16,7 +17,7 @@ export type McpServiceConfig = {
 };
 
 export const MCP_SERVICE_NAME = "@veyanet/mcp";
-export const MCP_SERVICE_VERSION = "1.1.0";
+export const MCP_SERVICE_VERSION = "1.2.1";
 
 export function loadConfig(): McpServiceConfig {
   const mcpApiKey = process.env.MCP_API_KEY?.trim() || null;
@@ -24,6 +25,7 @@ export function loadConfig(): McpServiceConfig {
     process.env.VEYA_RELAYER_PRIVATE_KEY?.trim() ||
     process.env.VEYA_DEPLOYER_PRIVATE_KEY?.trim() ||
     null;
+  const payerPrivateKey = process.env.VEYA_PAYER_PRIVATE_KEY?.trim() || null;
 
   return {
     port: Number(process.env.PORT || 8788),
@@ -38,6 +40,7 @@ export function loadConfig(): McpServiceConfig {
     apiUrl: (process.env.VEYA_API_URL || "https://api.veyanet.tech").replace(/\/$/, ""),
     mcpApiKey,
     relayerPrivateKey: relayer,
+    payerPrivateKey,
     validatorNodes: (process.env.VEYA_VALIDATOR_NODES ||
       "http://127.0.0.1:7701,http://127.0.0.1:7702,http://127.0.0.1:7703")
       .split(",")
@@ -52,6 +55,12 @@ export function loadConfig(): McpServiceConfig {
   };
 }
 
-export function writesEnabled(cfg: McpServiceConfig): boolean {
-  return Boolean(cfg.mcpApiKey && cfg.relayerPrivateKey);
+/** User-paid write tools are always registered. */
+export function writesEnabled(_cfg?: McpServiceConfig): boolean {
+  return true;
+}
+
+/** Host relayer env is unused; user-paid writes never set this true. */
+export function operatorRelayerWritesEnabled(_cfg?: McpServiceConfig): boolean {
+  return false;
 }
