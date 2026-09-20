@@ -12,16 +12,13 @@ export function createReadClient(cfg: McpServiceConfig): VeyaClient {
   });
 }
 
-export function createWriteClient(cfg: McpServiceConfig): VeyaClient {
-  if (!cfg.relayerPrivateKey) {
-    throw new Error("VEYA_RELAYER_PRIVATE_KEY required for write tools");
-  }
+export function createWriteClient(cfg: McpServiceConfig, payerPrivateKey: string): VeyaClient {
   return new VeyaClient({
     rpcUrl: cfg.rpcUrl,
     contractAddress: cfg.contractAddress,
     chainId: cfg.chainId,
     explorerUrl: cfg.explorerUrl,
-    payerPrivateKey: cfg.relayerPrivateKey,
+    payerPrivateKey,
     validatorNodes: cfg.validatorNodes,
     sealedNodeUrl: cfg.sealedNodeUrl,
   });
