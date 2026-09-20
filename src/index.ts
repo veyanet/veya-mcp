@@ -1,6 +1,7 @@
 export {
   loadConfig,
   writesEnabled,
+  operatorRelayerWritesEnabled,
   MCP_SERVICE_NAME,
   MCP_SERVICE_VERSION,
   type McpServiceConfig,
