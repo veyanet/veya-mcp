@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
   MCP_SERVICE_NAME,
@@ -12,8 +11,6 @@ import { registerFleetTools } from "./tools/fleet.js";
 import { registerRegistryTools } from "./tools/registry.js";
 import { registerProductTools } from "./tools/product.js";
 
-export const requestAuth = new AsyncLocalStorage<{ bearer: string | null }>();
-
 export function createMcpServer(cfg: McpServiceConfig): McpServer {
   const server = new McpServer({
     name: MCP_SERVICE_NAME,
@@ -25,7 +22,7 @@ export function createMcpServer(cfg: McpServiceConfig): McpServer {
   registerFleetTools(server, cfg);
   registerRegistryTools(server, cfg);
   registerProductTools(server, cfg);
-  registerWriteTools(server, cfg, () => requestAuth.getStore()?.bearer ?? null);
+  registerWriteTools(server, cfg);
 
   return server;
 }
