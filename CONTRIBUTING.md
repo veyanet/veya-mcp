@@ -42,7 +42,7 @@ npm test
 npm run smoke
 ```
 
-The CLI does not auto-load `.env`. Export vars or use a process manager. `scripts/verify-full.ts` may read `.env` for a relayer key without printing it.
+The CLI does not auto-load `.env`. Export vars or use a process manager. `scripts/verify-full.ts` may read `.env` for a test payer without printing it.
 
 ---
 
@@ -90,7 +90,7 @@ These are load-bearing. Docs and tool strings must match:
 4. Public paste URL is `https://mcp.veyanet.tech/mcp`.
 5. Guest Build = product API **403**.
 6. If validators are down, consensus reports `consensus_reached: false`.
-7. Writes register only when `MCP_API_KEY` **and** relayer key exist; each call still needs Bearer.
+7. On-chain writes are user-paid: product `apiKey` + the user's wallet. Empty wallet → the testnet-tokens sentence.
 8. Boundnet in `fleet.ts` is **in-process SDK** policy; product Boundnet is `veya_boundnet_invoke`. Keep those distinct in TOOLS.md.
 9. Local memory is `~/.veya` on the MCP host; console proofs are the product API.
 
@@ -104,13 +104,13 @@ Update [docs/TOOLS.md](./docs/TOOLS.md) in the **same PR** as a new or renamed t
 2. Use `server.tool(name, description, zodShape, handler)`.
 3. Description must be honest (testnet, AES, fail closed).
 4. Return `toolJson` / `toolError` from `src/api.ts` unless you have a reason to match `public.ts` raw content.
-5. Product tools: `sessionToken` argument; never treat it as `MCP_API_KEY`.
-6. Write tools: `requireAuth()` first; hex lengths 16-byte UUID / 32-byte digest.
+5. Product tools: `apiKey` argument (`veya_dev_` / `veya_live_`); never treat a guest JWT as a write credential.
+6. Write tools: product `apiKey` + user `payerPrivateKey`; hex lengths 16-byte UUID / 32-byte digest. `from` is the user address.
 7. Add the tool to [docs/TOOLS.md](./docs/TOOLS.md): what it does, when to use it, args, returns, what it does **not** do, auth.
-8. If the tool changes architecture (new backend), update [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) and [docs/SDK_BRIDGE.md](./docs/SDK_BRIDGE.md).
+8. If the tool changes architecture, update [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) and [docs/SDK_BRIDGE.md](./docs/SDK_BRIDGE.md).
 9. Extend smoke if the tool is always registered (`tools/list` already asserts ≥ 30 names plus ping/describe/verify/hash).
 
-Do not register write tools when `writesEnabled` is false.
+User-paid write tools are always registered. Do not send those txs from a hosted relayer.
 
 ---
 
