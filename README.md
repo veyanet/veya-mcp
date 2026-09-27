@@ -6,7 +6,7 @@
   **The official Model Context Protocol server for post-quantum agent tools, chain verification, sealed-execution honesty, and protocol settlement on Robinhood Chain.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.1-cb3837.svg?style=flat-edge)](./package.json)
+  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.2-cb3837.svg?style=flat-edge)](./package.json)
   [![Node Version](https://img.shields.io/badge/Node-%3E%3D20-green.svg?style=flat-edge)](https://nodejs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-edge)](https://www.typescriptlang.org/)
   [![MCP Endpoint](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9.svg?style=flat-edge)](https://mcp.veyanet.tech/mcp)
@@ -242,7 +242,7 @@ https://mcp.veyanet.tech/mcp
 
 ## 🧩 Core Tools Overview
 
-`@veyanet/mcp` **1.2.1** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads are free. Product tools need a site API key. On-chain writes spend **your** wallet.
+`@veyanet/mcp` **1.2.2** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads are free. Product tools need a site API key. On-chain writes spend **your** wallet.
 
 ### 1. Honesty & Discovery
 
