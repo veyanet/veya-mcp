@@ -25,7 +25,7 @@ Pinned settlement and public URLs. MCP and `@veyanet/sdk` must speak the **same*
 |----------|-------|
 | Network name | Robinhood Chain Testnet |
 | Chain ID (decimal) | `46630` |
-| Chain ID (hex) | `0xb636` |
+| Chain ID (hex) | `0xb626` |
 | JSON-RPC | `https://rpc.testnet.chain.robinhood.com` |
 | Explorer | `https://explorer.testnet.chain.robinhood.com` |
 | Protocol contract | `Veya.sol` (environments, agents, commitments, attestations) |
