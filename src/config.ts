@@ -17,7 +17,7 @@ export type McpServiceConfig = {
 };
 
 export const MCP_SERVICE_NAME = "@veyanet/mcp";
-export const MCP_SERVICE_VERSION = "1.2.1";
+export const MCP_SERVICE_VERSION = "1.2.2";
 
 export function loadConfig(): McpServiceConfig {
   const mcpApiKey = process.env.MCP_API_KEY?.trim() || null;
