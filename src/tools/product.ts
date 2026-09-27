@@ -98,12 +98,12 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_create_environment",
-    "Create environment in the product API (Build). Does not spend gas. Guests and non-keys are refused.",
+    "Create a workspace in the product API. This does not spend gas and does not perform a payment. Guests and non-keys are refused. type is stored for the API and defaults to research when omitted.",
     {
       apiKey,
       sessionToken,
       name: z.string().min(1),
-      type: z.enum(["research", "governance", "treasury", "contributor", "protocol", "desci"]),
+      type: z.enum(["research", "governance", "treasury", "contributor", "protocol", "desci"]).optional(),
     },
     async ({ apiKey: key, sessionToken: jwt, name, type }) => {
       try {
@@ -112,7 +112,7 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
           await apiRequest(cfg, "/v1/environments", {
             method: "POST",
             apiKey: productKey,
-            body: { name, type },
+            body: { name, type: type ?? "research" },
           }),
         );
       } catch (err) {
@@ -143,12 +143,12 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_deploy_agent",
-    "Deploy an agent (Build). Product API key required. Guests receive 403 by design.",
+    "Create an agent in a workspace. This does not spend gas and does not perform a payment. Limit the agent with permissionConfig.allowedTools. If allowedTools is omitted, the agent cannot call a tool. type is stored for the API and defaults to coordination when omitted.",
     {
       apiKey,
       sessionToken,
       environmentId: z.string().min(1),
-      type: z.string().min(1),
+      type: z.string().min(1).optional(),
       agentKind: z.string().min(3).max(64).optional(),
       permissionConfig: z.record(z.unknown()).optional(),
     },
@@ -159,7 +159,11 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
           await apiRequest(cfg, `/v1/environments/${encodeURIComponent(environmentId)}/agents`, {
             method: "POST",
             apiKey: productKey,
-            body: { type, agentKind: agentKind ?? type, permissionConfig },
+            body: {
+              type: type ?? "coordination",
+              agentKind: agentKind ?? type ?? "coordination",
+              permissionConfig: permissionConfig ?? {},
+            },
           }),
         );
       } catch (err) {
