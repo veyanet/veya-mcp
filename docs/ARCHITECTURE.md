@@ -4,7 +4,7 @@
 
 This document explains how the MCP server is built, who talks to whom, and what a tool call actually does. Words stay simple. Details stay real.
 
-[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.1-cb3837?style=flat-edge)](../package.json)
+[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.2-cb3837?style=flat-edge)](../package.json)
 [![Robinhood Testnet](https://img.shields.io/badge/Testnet-Chain%20ID%2046630-blue?style=flat-edge)](https://explorer.testnet.chain.robinhood.com/address/0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84)
 [![Public MCP](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9?style=flat-edge)](https://mcp.veyanet.tech/mcp)
 
@@ -69,13 +69,13 @@ Live product facts:
 
 | Field | Value |
 |-------|-------|
-| npm package | `@veyanet/mcp` **1.2.1** |
-| SDK it depends on | `@veyanet/sdk` **^1.2.1** |
+| npm package | `@veyanet/mcp` **1.2.2** |
+| SDK it depends on | `@veyanet/sdk` **^1.2.3** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Landing | `https://mcp.veyanet.tech/` |
 | MCP health | `https://mcp.veyanet.tech/health` |
 | Product API | `https://api.veyanet.tech` |
-| Chain | Robinhood Chain testnet, id **46630** (`0xb636`) |
+| Chain | Robinhood Chain testnet, id **46630** (`0xb626`) |
 | Contract | `Veya.sol` at `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
 | RPC | `https://rpc.testnet.chain.robinhood.com` |
 | Explorer | `https://explorer.testnet.chain.robinhood.com` |
