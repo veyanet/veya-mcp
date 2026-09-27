@@ -512,7 +512,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What it does.** `POST /v1/environments` — **Build** API row. Does **not** spend gas. Register on chain with `veya_register_environment`.
 
-**Arguments.** `apiKey`, `name`, `type` (`research` \| `governance` \| `treasury` \| `contributor` \| `protocol` \| `desci`).
+**Arguments.** `apiKey`, `name`, optional `type` (`research` \| `governance` \| `treasury` \| `contributor` \| `protocol` \| `desci`). Omitted `type` is stored as `research`. Creating a workspace does not perform a payment.
 
 **Guest:** refused (`apiKey` must be a product key).
 
@@ -522,7 +522,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What they do.** List agents in a room, or deploy one (**Build**).
 
-**Deploy arguments.** `apiKey`, `environmentId`, `type`, optional `permissionConfig`.
+**Deploy arguments.** `apiKey`, `environmentId`, optional `type` (stored as `coordination` when omitted), optional `agentKind`, optional `permissionConfig`. Put the tool names in `permissionConfig.allowedTools`. If that list is omitted, the agent cannot call a tool. Deploying an agent does not perform a payment.
 
 ---
 
