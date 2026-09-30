@@ -70,7 +70,7 @@ Live product facts:
 | Field | Value |
 |-------|-------|
 | npm package | `@veyanet/mcp` **1.2.2** |
-| SDK it depends on | `@veyanet/sdk` **^1.2.3** |
+| SDK it depends on | `@veyanet/sdk` **^1.2.4** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Landing | `https://mcp.veyanet.tech/` |
 | MCP health | `https://mcp.veyanet.tech/health` |
