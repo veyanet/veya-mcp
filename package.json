@@ -1,6 +1,6 @@
 {
   "name": "@veyanet/mcp",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "VEYA MCP - Streamable HTTP Model Context Protocol for Robinhood Chain (testnet 46630)",
   "license": "MIT",
   "type": "module",

@@ -49,7 +49,7 @@ From this package’s `package.json`:
 "@veyanet/sdk": "^1.2.4"
 ```
 
-MCP version is **1.2.2**. SDK version is **^1.2.4** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
+MCP version is **1.2.3**. SDK version is **^1.2.4** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
 
 ---
 

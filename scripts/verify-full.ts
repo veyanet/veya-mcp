@@ -110,7 +110,7 @@ async function main() {
       params: {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "veya-verify", version: "1.2.2" },
+        clientInfo: { name: "veya-verify", version: "1.2.3" },
       },
     });
     assert.equal(init.status, 200, init.raw.slice(0, 300));
@@ -134,7 +134,7 @@ async function main() {
     {
       const r = await callTool(port, 10, "veya_describe");
       const t = toolText(r.json);
-      const ok = t.includes("1.2.2") && t.includes("46630");
+      const ok = t.includes("1.2.3") && t.includes("46630");
       log("veya_describe", ok);
       results.push({ name: "veya_describe", ok, note: "user" });
     }
