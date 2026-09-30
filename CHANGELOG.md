@@ -6,11 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-## [Unreleased]
+## [1.2.3] — 2026-09-30
 
 ### Added
 - `veya_prove`: text, canonical JSON, or a receipt hash in, one proof object out. A receipt with no VEYA log is a refusal. Without `anchor`, the result is the digest and `anchored` is false. Anchor writes one commitment only when `payerPrivateKey` and an existing `environmentId` are both passed, then reads that transaction back. Anchor without a payer key is a refusal. Neither of those sends a transaction. A refusal sets MCP `isError`.
 - Depends on `@veyanet/sdk` ^1.2.4 for that proof object.
+- Service version, health `version`, and `veya_describe` report **1.2.3**.
 
 ---
 

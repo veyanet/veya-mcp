@@ -3,19 +3,14 @@
  * Does not print secrets (API keys, private keys, JWTs).
  */
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { MCP_SERVICE_VERSION } from "../src/config.js";
 import { MINT_API_KEY_HINT, NO_TESTNET_TOKENS } from "../src/credentials.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const API = (process.env.VEYA_API_URL || "http://127.0.0.1:8799").replace(/\/$/, "");
 const MCP_PORT = Number(process.env.MCP_PORT || 8788);
 const RPC = "https://rpc.testnet.chain.robinhood.com";
 const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
-const BACKEND_ENV = resolve(__dirname, "../../backend/.env");
 const KNOWN_TX = "0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8";
 
 const EXPECTED_TOOLS = [
@@ -69,25 +64,6 @@ const EXPECTED_TOOLS = [
   "veya_register_pq_onchain",
   "veya_anchor_pq_attestation",
 ];
-
-function loadNamedEnv(file: string, keys: string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!existsSync(file)) return out;
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t || t.startsWith("#")) continue;
-    const i = t.indexOf("=");
-    if (i <= 0) continue;
-    const k = t.slice(0, i).trim();
-    if (!keys.includes(k)) continue;
-    let v = t.slice(i + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-      v = v.slice(1, -1);
-    }
-    out[k] = v;
-  }
-  return out;
-}
 
 function toolText(json: unknown): string {
   const c = (json as { result?: { content?: Array<{ text?: string }> } })?.result?.content?.[0]?.text;
@@ -396,8 +372,9 @@ async function main() {
     check("guest", "guest cannot deploy agent", isError(gDeploy.json));
   }
 
-  const backend = loadNamedEnv(BACKEND_ENV, ["VEYA_RELAYER_PRIVATE_KEY"]);
-  const relayer = new ethers.Wallet(backend.VEYA_RELAYER_PRIVATE_KEY);
+  const relayerKey = process.env.VEYA_RELAYER_PRIVATE_KEY?.trim();
+  if (!relayerKey) throw new Error("VEYA_RELAYER_PRIVATE_KEY is required");
+  const relayer = new ethers.Wallet(relayerKey);
   const user = ethers.Wallet.createRandom();
   const other = ethers.Wallet.createRandom();
   const provider = new ethers.JsonRpcProvider(RPC);
