@@ -76,7 +76,7 @@ This core philosophy is implemented through three primary architectural pillars:
 Strangers and agent runtimes connect with a single URL. The server implements MCP Streamable HTTP (`POST /mcp`) using `@modelcontextprotocol/sdk`.
 
 ### 2. User-paid write surface
-On-chain write tools are always registered. Every write needs a product `apiKey` and your `payerPrivateKey` (or `VEYA_PAYER_PRIVATE_KEY`). `msg.sender` is **your** address. An empty wallet returns: `You don't have testnet tokens. Please get them for the transaction.`
+On-chain write tools are always registered. Product writes need a product `apiKey` and your `payerPrivateKey`. `veya_prove` is separate: a read needs no key, and an anchor needs `environmentId` plus `payerPrivateKey` only. `msg.sender` is **your** address. An empty wallet returns: `You don't have testnet tokens. Please get them for the transaction.`
 
 ### 3. Honesty Before Marketing
 `GET /health` and `veya_describe` state Robinhood **testnet 46630**, sealed = **AES-256-GCM**, and whether writes are enabled. Quorum is matching hashes; unreachable nodes return `consensus_reached: false`. `Veya.sol` is a protocol contract.
@@ -199,10 +199,10 @@ app.listen(cfg.port, cfg.host);
 | `VEYA_API_URL` | Product API (health, registry, sessions, fleet capacity) | `https://api.veyanet.tech` |
 | `VEYA_VALIDATOR_NODES` | Backend fleet URLs (server-side; not stranger loopback) | configured per host |
 | `VEYA_SEALED_NODE_URL` | Sealed capacity URL (backend-owned) | configured per host |
-| `VEYA_PAYER_PRIVATE_KEY` | Your wallet for on-chain writes | unset → pass `payerPrivateKey` per call |
+| `VEYA_PAYER_PRIVATE_KEY` | Self-hosted payer for product write tools | `veya_prove` does not read this. Pass `payerPrivateKey` on an anchor call |
 | `MCP_API_KEY` | Operator relayer path only | unset on the public host |
-| `VEYA_RELAYER_PRIVATE_KEY` | Unused operator-relayer leftover | unset on the public host |
-| `VEYA_DEPLOYER_PRIVATE_KEY` | Unused operator-relayer leftover | unset on the public host |
+| `VEYA_RELAYER_PRIVATE_KEY` | Unused by `veya_prove` | unset on the public host |
+| `VEYA_DEPLOYER_PRIVATE_KEY` | SDK payer when `VeyaClient` is constructed without `payerPrivateKey` | unset on the public host |
 | `CORS_ORIGIN` | Comma-separated Origin allowlist | empty = reject credentialed browser Origin |
 | `NODE_ENV` | Runtime mode | `development` |
 
@@ -218,7 +218,7 @@ Paste into a custom MCP connector using **Streamable HTTP** transport:
 https://mcp.veyanet.tech/mcp
 ```
 
-No API key is required for public tools. Product tools need `apiKey`. On-chain writes need that key plus **your** funded testnet wallet.
+No API key is required for public tools, including `veya_prove`. Product tools need `apiKey`. Product on-chain writes need that key plus **your** funded testnet wallet. An anchor through `veya_prove` needs `environmentId` and `payerPrivateKey` only.
 
 ### Claude CLI
 
@@ -242,7 +242,38 @@ https://mcp.veyanet.tech/mcp
 
 ## 🧩 Core Tools Overview
 
-`@veyanet/mcp` **1.2.3** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads are free. Product tools need a site API key. On-chain writes spend **your** wallet.
+`@veyanet/mcp` **1.2.3** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads are free. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not.
+
+### 0. Proof
+
+```text
+Tool: veya_prove
+Args: exactly one of text, json, txHash
+      anchor, environmentId, payerPrivateKey only when anchoring
+```
+
+One proof from text, a JSON string, or a receipt hash. Paste `https://mcp.veyanet.tech/mcp` in Cursor before the run, or the tool is not in the agent's tool list. The URL accepts `POST`. The response is a stream (`event: message` and a `data:` line).
+
+A read sends nothing:
+
+```json
+{ "text": "hello" }
+```
+
+Text `hello` returns `mode` `digest`, `anchored` false, and digest `ea8f163db38682925e4491c5e58d4bb3506ef8c14eb78a86e908c5624a67200f`.
+
+An anchor sends one `storeCommitment` from the wallet in `payerPrivateKey`. It does not use a product `apiKey`, and it does not use the host relayer. The environment id must already exist on `Veya.sol`. This one does: `7d0af0ba-2ae3-4d0e-bc75-0bbaccb3dd71`. A 32-hex bytes16 also parses. A hyphenated id must be a real UUID, so `00000000-0000-0000-0000-000000000001` is refused.
+
+```json
+{
+  "text": "a unique string",
+  "anchor": true,
+  "environmentId": "7d0af0ba-2ae3-4d0e-bc75-0bbaccb3dd71",
+  "payerPrivateKey": "<funded private key>"
+}
+```
+
+A receipt with no VEYA log and a receipt that called another contract both return the full proof object: `ok` false, `mode` `refused`, `inputKind` `tx`, `anchored` false, plus `txHash`, `explorerUrl`, and `refusal`.
 
 ### 1. Honesty & Discovery
 
@@ -320,9 +351,9 @@ Writes go through SDK `EvmAnchor`, which calls `ensureRobinhoodChain()` before s
 
 1. Open Claude or Cursor MCP settings.
 2. Add Streamable HTTP URL: `https://mcp.veyanet.tech/mcp`.
-3. Ask the agent to run `veya_describe`.
-4. Ask the agent to run `veya_ping_chain` and confirm chain id **46630**.
-5. Ask the agent to run `veya_verify_transaction` with a known `Veya.sol` tx hash.
+3. Ask the agent to run `veya_prove` with `{ "text": "hello" }`.
+4. Ask the agent to run `veya_describe`.
+5. Ask the agent to run `veya_ping_chain` and confirm chain id **46630**.
 
 ### B. Developer path (local process)
 
@@ -344,10 +375,12 @@ npm run smoke
 
 Smoke starts an in-process server, performs MCP initialize + `tools/list`, then calls `veya_describe` and `veya_ping_chain` against live RPC.
 
-### C. User write path (your funded testnet wallet)
+### C. Product write path (your funded testnet wallet)
+
+These tools need a product `apiKey`. `veya_prove` does not. An anchor on `veya_prove` is `environmentId` plus `payerPrivateKey` only.
 
 1. Mint `veya_dev_` / `veya_live_` on the product site.
-2. Set `VEYA_PAYER_PRIVATE_KEY` to **that same wallet** (self-host) or pass `payerPrivateKey` on the tool.
+2. Set `VEYA_PAYER_PRIVATE_KEY` on a self-hosted server, or pass `payerPrivateKey` on the tool. The public `veya_prove` tool reads only the argument.
 3. Call `veya_store_commitment` (or `veya_anchor_proof`) with `apiKey`.
 4. Confirm `from` in the result is your address, and open the explorer `txHash`.
 5. If the wallet is empty you get: `You don't have testnet tokens. Please get them for the transaction.`

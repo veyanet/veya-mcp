@@ -46,8 +46,9 @@ Auth is one of:
 | **None** | Anyone connected to the MCP URL |
 | **Key** | Pass `apiKey` (`veya_dev_…` / `veya_live_…`) from the product site |
 | **Key + payer** | Product `apiKey` plus your wallet (`payerPrivateKey` or `VEYA_PAYER_PRIVATE_KEY`) |
+| **Payer only** | `veya_prove` with `anchor: true`. `environmentId` and `payerPrivateKey`. No product `apiKey` |
 
-Guest sessions are **Use listing only**. Create environment and on-chain writes need a product API key. On-chain writes also need **your** funded testnet wallet. Guest JWT is not a write credential.
+Guest sessions are **Use listing only**. Create environment and product on-chain writes need a product API key. Those writes also need **your** funded testnet wallet. Guest JWT is not a write credential. `veya_prove` without `anchor` needs no key.
 
 If validators or sealed-node are down, consensus/sealed tools **fail closed**. MCP never invents a matching hash.
 
@@ -166,7 +167,7 @@ With `anchor` true, the call also needs `environmentId` for an environment that 
 | `environmentId` | string | yes when `anchor` is true |
 | `payerPrivateKey` | string | yes when `anchor` is true |
 
-**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `chainId`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
+**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `chainId`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. A receipt with no VEYA log and a receipt that called a different contract both return that full object. The second one sets `refusal` to `transaction did not target Veya.sol — not a VEYA proof`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
 
 ---
 
