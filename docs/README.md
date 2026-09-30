@@ -53,7 +53,7 @@ flowchart TB
 | Item | Value |
 |------|-------|
 | npm | `@veyanet/mcp` **1.2.2** |
-| SDK | `@veyanet/sdk` **^1.2.3** |
+| SDK | `@veyanet/sdk` **^1.2.4** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Product API | `https://api.veyanet.tech` |
 | Chain | Robinhood testnet **46630** |

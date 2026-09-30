@@ -81,6 +81,7 @@ flowchart TB
 | Know what this server is | `veya_describe` |
 | See if the chain is alive | `veya_ping_chain` |
 | Check a known tx | `veya_verify_transaction` |
+| Prove text, JSON, or a receipt | `veya_prove` |
 | Hash text the VEYA way | `veya_hash_blake3` |
 | See if the product API / fleet is honest | `veya_api_health` |
 | Make PQ keys (no chain) | `veya_pq_keygen` |
@@ -141,6 +142,31 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 **Arguments.** None.
 
 **What you get back.** Ping fields plus `chainId` as a string, `expectedChainId` from config (should be `46630` on the public product), and `config` from `client.describe()`. On the public pin, that chain id is **46630**.
+
+---
+
+## `veya_prove`
+
+**What it does.** One proof entry. Pass exactly one of `text`, `json`, or `txHash`. Text and JSON become a BLAKE3 digest of canonical bytes. The same JSON object hashes the same when its keys are in a different order. Array order is kept. A `0x` + 64 hex transaction hash is read from the live receipt. Success for a hash is a parsed `Veya.sol` log plus the explorer link. A hash with no VEYA log is a refusal.
+
+Without `anchor`, the result is `mode` `digest`, `ok` true, and `anchored` false. No transaction is sent.
+
+With `anchor` true, the call also needs `environmentId` for an environment that already exists on `Veya.sol`, and `payerPrivateKey`. That writes one `storeCommitment`, then reads the new transaction back. `mode` is `anchored`. A missing payer key or a missing environment id is a refusal and sends nothing.
+
+**When to use it.** You have text, a JSON value, or a receipt hash and want one proof object.
+
+**Arguments.**
+
+| Name | Type | Required |
+|------|------|----------|
+| `text` | string | exactly one of text, json, txHash |
+| `json` | string, a JSON value | exactly one of text, json, txHash |
+| `txHash` | string, `0x` + 64 hex | exactly one of text, json, txHash |
+| `anchor` | boolean | no |
+| `environmentId` | string | yes when `anchor` is true |
+| `payerPrivateKey` | string | yes when `anchor` is true |
+
+**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `chainId`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
 
 ---
 
@@ -650,6 +676,7 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_ping_chain` | Public | None |
 | `veya_hash_blake3` | Public | None |
 | `veya_verify_transaction` | Public | None |
+| `veya_prove` | Public read; write only with a payer argument | Payer key only when `anchor` is true |
 | `veya_api_health` | Public | None |
 | `veya_writes_status` | Writes | None |
 | `veya_pq_keygen` | Crypto | None |
