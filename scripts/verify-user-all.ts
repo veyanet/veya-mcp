@@ -194,13 +194,13 @@ async function main() {
   console.log(`[user] MCP ${MCP_SERVICE_VERSION} :${MCP_PORT} API=${API}`);
 
   const health = await fetch(`http://127.0.0.1:${MCP_PORT}/health`).then((r) => r.json());
-  check("http", "GET /health 1.2.2 user-paid", health.version === "1.2.2" && health.writesEnabled === true && health.operatorRelayerWrites === false);
+  check("http", "GET /health 1.2.3 user-paid", health.version === "1.2.3" && health.writesEnabled === true && health.operatorRelayerWrites === false);
 
   const landing = await fetch(`http://127.0.0.1:${MCP_PORT}/`).then((r) => r.text());
   check(
     "http",
-    "GET / landing is 1.2.2 user-paid copy",
-    landing.includes("@veyanet/mcp@1.2.2") &&
+    "GET / landing is 1.2.3 user-paid copy",
+    landing.includes("@veyanet/mcp@1.2.3") &&
       landing.includes("https://mcp.veyanet.tech/mcp") &&
       landing.toLowerCase().includes("your testnet") &&
       !landing.toLowerCase().includes("fhe ran"),
@@ -213,7 +213,7 @@ async function main() {
     params: {
       protocolVersion: "2024-11-05",
       capabilities: {},
-      clientInfo: { name: "user-all", version: "1.2.2" },
+      clientInfo: { name: "user-all", version: "1.2.3" },
     },
   });
   check("session", "MCP initialize like Cursor/Claude", init.status === 200 && Boolean(init.json?.result));
@@ -225,7 +225,7 @@ async function main() {
 
   const describe = await call("veya_describe");
   const dt = toolText(describe.json);
-  check("stranger", "veya_describe no key", !isError(describe.json) && dt.includes("1.2.2") && dt.includes("46630") && dt.includes("AES-256-GCM"));
+  check("stranger", "veya_describe no key", !isError(describe.json) && dt.includes("1.2.3") && dt.includes("46630") && dt.includes("AES-256-GCM"));
 
   const ping = await call("veya_ping_chain");
   const pt = toolText(ping.json);

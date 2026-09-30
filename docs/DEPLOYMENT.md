@@ -4,7 +4,7 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.2.2`
+**npm:** `@veyanet/mcp@1.2.3`
 
 Strangers only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 

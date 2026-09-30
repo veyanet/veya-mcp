@@ -126,7 +126,7 @@ Shape (fields from code):
 |-------|---------|
 | `status` | `"ok"` if the MCP process is up (not a fleet check) |
 | `service` | `@veyanet/mcp` |
-| `version` | `1.2.2` (from `MCP_SERVICE_VERSION`) |
+| `version` | `1.2.3` (from `MCP_SERVICE_VERSION`) |
 | `publicMcpUrl` | From `PUBLIC_MCP_URL` env |
 | `chainId` | Configured pin (should be `46630`) |
 | `contractAddress` | `Veya.sol` |

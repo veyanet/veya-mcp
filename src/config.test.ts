@@ -26,12 +26,12 @@ import {
 } from "./payer.js";
 
 describe("veyanet mcp config", () => {
-  it("defaults to testnet 46630 and version 1.2.2", () => {
+  it("defaults to testnet 46630 and version 1.2.3", () => {
     delete process.env.ROBINHOOD_CHAIN_ID;
     const cfg = loadConfig();
     assert.equal(cfg.chainId, 46630);
     assert.match(cfg.contractAddress, /^0x1a1D/i);
-    assert.equal(MCP_SERVICE_VERSION, "1.2.2");
+    assert.equal(MCP_SERVICE_VERSION, "1.2.3");
   });
 
   it("user-paid writes stay enabled without host relayer keys", () => {
@@ -164,7 +164,7 @@ describe("veyanet mcp http", () => {
       assert.equal(res.status, 200);
       const body = (await res.json()) as Record<string, unknown>;
       assert.equal(body.service, MCP_SERVICE_NAME);
-      assert.equal(body.version, "1.2.2");
+      assert.equal(body.version, "1.2.3");
       assert.equal(body.chainId, 46630);
       assert.equal(body.writesEnabled, true);
       assert.equal(body.operatorRelayerWrites, false);

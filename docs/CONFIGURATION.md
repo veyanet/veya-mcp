@@ -70,7 +70,7 @@ Type `McpServiceConfig`:
 | `corsOrigins` | CSV `CORS_ORIGIN` |
 | `nodeEnv` | `NODE_ENV` |
 
-`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.2` (code constant, not read from env).
+`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.3` (code constant, not read from env).
 
 ---
 
