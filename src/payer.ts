@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import type { McpServiceConfig } from "./config.js";
 import { apiRequest } from "./api.js";
-import { MINT_API_KEY_HINT, NO_TESTNET_TOKENS } from "./credentials.js";
+import { MINT_API_KEY_HINT, noFundsMessage, NO_TESTNET_TOKENS } from "./credentials.js";
 
 export { NO_TESTNET_TOKENS };
 
@@ -30,7 +30,7 @@ export function payerAddress(privateKey: string): string {
   return new ethers.Wallet(privateKey).address;
 }
 
-export function mapWriteError(err: unknown): Error {
+export function mapWriteError(err: unknown, network: "testnet" | "mainnet" = "testnet"): Error {
   const message =
     err instanceof Error
       ? `${err.message} ${String((err as { shortMessage?: string; code?: string }).shortMessage ?? "")} ${String((err as { code?: string }).code ?? "")}`
@@ -42,7 +42,7 @@ export function mapWriteError(err: unknown): Error {
       message,
     )
   ) {
-    return new Error(NO_TESTNET_TOKENS);
+    return new Error(noFundsMessage(network));
   }
   return err instanceof Error ? err : new Error(message.trim() || String(err));
 }
@@ -55,7 +55,7 @@ export async function assertPayerFunded(
   const provider = new ethers.JsonRpcProvider(cfg.rpcUrl);
   const balance = await provider.getBalance(wallet.address);
   if (balance === 0n) {
-    throw new Error(NO_TESTNET_TOKENS);
+    throw new Error(noFundsMessage(cfg.network));
   }
   return { address: wallet.address, balanceWei: balance.toString() };
 }
