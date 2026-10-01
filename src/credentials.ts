@@ -1,10 +1,17 @@
 export const NO_TESTNET_TOKENS =
   "You don't have testnet tokens. Please get them for the transaction.";
 
+export const NO_MAINNET_FUNDS =
+  "Your wallet has no ETH on Robinhood Chain. Add funds and try again.";
+
+export function noFundsMessage(network: "testnet" | "mainnet"): string {
+  return network === "mainnet" ? NO_MAINNET_FUNDS : NO_TESTNET_TOKENS;
+}
+
 export const ROBINHOOD_TESTNET_FAUCET_URL = "https://faucet.testnet.chain.robinhood.com/";
 
 export const MINT_API_KEY_HINT =
-  "Mint a product API key on the product site and fund your wallet. Guest sessions cannot write from MCP.";
+  "Create a product API key at https://app.veyanet.tech (System → API Keys) and fund your wallet. Guest sessions cannot write from MCP.";
 
 const PRODUCT_KEY_PREFIXES = ["veya_dev_", "veya_live_", "vya_dev_", "vya_live_"] as const;
 
