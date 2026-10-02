@@ -1,6 +1,14 @@
 import { VeyaClient } from "@veyanet/sdk";
 import type { McpServiceConfig } from "./config.js";
 
+function refuseUnpublished(cfg: McpServiceConfig): void {
+  if (cfg.network === "mainnet" && !cfg.contractAddress) {
+    throw new Error(
+      "MAINNET_UNPUBLISHED: Veya.sol is not published on Robinhood Chain mainnet. Nothing was sent.",
+    );
+  }
+}
+
 export function createReadClient(cfg: McpServiceConfig): VeyaClient {
   return new VeyaClient({
     rpcUrl: cfg.rpcUrl,
@@ -13,6 +21,7 @@ export function createReadClient(cfg: McpServiceConfig): VeyaClient {
 }
 
 export function createWriteClient(cfg: McpServiceConfig, payerPrivateKey: string): VeyaClient {
+  refuseUnpublished(cfg);
   return new VeyaClient({
     rpcUrl: cfg.rpcUrl,
     contractAddress: cfg.contractAddress,
