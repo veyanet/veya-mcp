@@ -4,18 +4,16 @@ import {
   runConsensus,
   protectedExec,
   requireVerifiedSeal,
-  setToolPolicy,
-  routeMessage,
-  routeSecureMessage,
+  establishKyberSession,
   verifySecureMessage,
-  storeMemory,
-  readMemory,
-  invalidateMemory,
   pq,
 } from "@veyanet/sdk";
 import type { McpServiceConfig } from "../config.js";
 import { createReadClient } from "../sdk.js";
-import { toolError, toolJson } from "../api.js";
+import { safeRequestMessage, toolError, toolJson } from "../api.js";
+import { assertKeyRate } from "../limits.js";
+import { readAccountForKey } from "../payer.js";
+import { asTool, scopedApi, scopedKey } from "./scoped.js";
 
 function hexToBytes(hex: string): Uint8Array {
   const h = hex.trim().replace(/^0x/, "");
@@ -28,16 +26,19 @@ function hexToBytes(hex: string): Uint8Array {
 export function registerFleetTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_run_consensus",
-    "Run 2-of-3 BLAKE3 consensus. Fleet capacity is backend/product-API owned (api.veyanet.tech). Fail closed if unreachable — no invented quorum.",
+    "Run 2-of-3 BLAKE3 consensus on this server's validator list. Needs a product API key. Returns consensus_reached: false if validators are unreachable.",
     {
+      apiKey: z.string().optional(),
       taskId: z.string().min(1),
       payload: z.record(z.unknown()).default({}),
-      nodeUrls: z.array(z.string().url()).optional(),
     },
-    async ({ taskId, payload, nodeUrls }) => {
+    async ({ apiKey, taskId, payload }) => {
+      const key = scopedKey(apiKey);
+      if (typeof key !== "string") return key.error;
       try {
-        const urls = nodeUrls?.length ? nodeUrls : cfg.validatorNodes;
-        const result = await runConsensus(urls, taskId, payload);
+        assertKeyRate(key);
+        await readAccountForKey(cfg, key);
+        const result = await runConsensus(cfg.validatorNodes, taskId, payload);
         return toolJson(result);
       } catch (err) {
         return toolError(err);
@@ -47,19 +48,22 @@ export function registerFleetTools(server: McpServer, cfg: McpServiceConfig): vo
 
   server.tool(
     "veya_sealed_execute",
-    "AES-256-GCM protected execution (not FHE). Sealed capacity is backend/product-API owned. Fail closed if unreachable.",
+    "AES-256-GCM protected execution on this server's sealed node. Needs a product API key. The call fails closed when that capacity is unreachable.",
     {
+      apiKey: z.string().optional(),
       environmentId: z.string().min(1),
       agentId: z.string().min(1),
       eventType: z.string().min(1),
       payload: z.record(z.unknown()),
       sessionEntropyHex: z.string().min(16),
-      sealedNodeUrl: z.string().url().optional(),
     },
     async (args) => {
+      const key = scopedKey(args.apiKey);
+      if (typeof key !== "string") return key.error;
       try {
-        const url = args.sealedNodeUrl ?? cfg.sealedNodeUrl;
-        const result = await protectedExec(url, {
+        assertKeyRate(key);
+        await readAccountForKey(cfg, key);
+        const result = await protectedExec(cfg.sealedNodeUrl, {
           environmentId: args.environmentId,
           agentId: args.agentId,
           eventType: args.eventType,
@@ -75,26 +79,34 @@ export function registerFleetTools(server: McpServer, cfg: McpServiceConfig): vo
 
   server.tool(
     "veya_set_tool_policy",
-    "Allow or deny a tool name for an agent in the in-process Boundnet policy map (SDK)",
+    "Allow or deny a tool for an agent. Requires the API key that owns the environment. Saved on that account.",
     {
+      apiKey: z.string().optional(),
+      environmentId: z.string().min(1),
       agentId: z.string().min(1),
       tool: z.string().min(1),
       allowed: z.boolean(),
     },
-    async ({ agentId, tool, allowed }) => {
-      try {
-        setToolPolicy(agentId, tool, allowed);
-        return toolJson({ ok: true, agentId, tool, allowed });
-      } catch (err) {
-        return toolError(err);
-      }
+    async ({ apiKey, environmentId, agentId, tool, allowed }) => {
+      const key = scopedKey(apiKey);
+      if (typeof key !== "string") return key.error;
+      const result = await scopedApi(
+        cfg,
+        key,
+        `/v1/environments/${encodeURIComponent(environmentId)}/agents/${encodeURIComponent(agentId)}/tool-policy`,
+        "POST",
+        { tool, allowed },
+      );
+      return asTool(result);
     },
   );
 
   server.tool(
     "veya_route_message",
-    "Route an inter-agent message through deny-by-default tool policy",
+    "Check the saved tool rule for this API key before routing. Deny stays deny.",
     {
+      apiKey: z.string().optional(),
+      environmentId: z.string().min(1),
       id: z.string().min(1),
       fromAgent: z.string().min(1),
       toAgent: z.string().min(1),
@@ -102,18 +114,25 @@ export function registerFleetTools(server: McpServer, cfg: McpServiceConfig): vo
       payload: z.unknown(),
     },
     async (msg) => {
-      try {
-        return toolJson(routeMessage(msg));
-      } catch (err) {
-        return toolError(err);
-      }
+      const key = scopedKey(msg.apiKey);
+      if (typeof key !== "string") return key.error;
+      const result = await scopedApi(
+        cfg,
+        key,
+        `/v1/environments/${encodeURIComponent(msg.environmentId)}/agents/${encodeURIComponent(msg.fromAgent)}/tool-check`,
+        "POST",
+        { tool: msg.tool },
+      );
+      return asTool(result);
     },
   );
 
   server.tool(
     "veya_route_secure_message",
-    "Policy route + Kyber-768 session + ML-DSA-44 signed envelope",
+    "Check the saved tool rule for this API key, then wrap an allowed message in a Kyber-768 session and an ML-DSA-44 signature.",
     {
+      apiKey: z.string().optional(),
+      environmentId: z.string().min(1),
       id: z.string().min(1),
       fromAgent: z.string().min(1),
       toAgent: z.string().min(1),
@@ -123,23 +142,43 @@ export function registerFleetTools(server: McpServer, cfg: McpServiceConfig): vo
       senderPublicKeyHex: z.string().min(8),
     },
     async (args) => {
+      const key = scopedKey(args.apiKey);
+      if (typeof key !== "string") return key.error;
+      const checked = await scopedApi(
+        cfg,
+        key,
+        `/v1/environments/${encodeURIComponent(args.environmentId)}/agents/${encodeURIComponent(args.fromAgent)}/tool-check`,
+        "POST",
+        { tool: args.tool },
+      );
+      if ("error" in checked) return checked.error;
+      if (checked.httpStatus >= 400) return asTool(checked);
+      const body = checked.body as { policyStatus?: string };
+      if (body.policyStatus !== "allowed") {
+        return toolJson({ policyStatus: "denied", id: args.id, tool: args.tool });
+      }
       try {
-        const routed = await routeSecureMessage(
-          {
-            id: args.id,
-            fromAgent: args.fromAgent,
-            toAgent: args.toAgent,
-            tool: args.tool,
-            payload: args.payload,
-          },
-          {
-            senderPrivateKey: hexToBytes(args.senderPrivateKeyHex),
-            senderPublicKey: hexToBytes(args.senderPublicKeyHex),
-          },
-        );
-        return toolJson(routed);
+        const session = await establishKyberSession(args.fromAgent, args.toAgent);
+        const envelope = JSON.stringify({
+          id: args.id,
+          fromAgent: args.fromAgent,
+          toAgent: args.toAgent,
+          tool: args.tool,
+          policyStatus: "allowed",
+          kyberSessionId: session.sessionId,
+        });
+        const sig = await pq.signPQ(new TextEncoder().encode(envelope), hexToBytes(args.senderPrivateKeyHex));
+        return toolJson({
+          id: args.id,
+          fromAgent: args.fromAgent,
+          toAgent: args.toAgent,
+          tool: args.tool,
+          policyStatus: "allowed",
+          kyberSessionId: session.sessionId,
+          mlDsaSig: Buffer.from(sig).toString("hex"),
+        });
       } catch (err) {
-        return toolError(err);
+        return toolError(new Error(safeRequestMessage(err)));
       }
     },
   );
@@ -166,63 +205,83 @@ export function registerFleetTools(server: McpServer, cfg: McpServiceConfig): vo
 
   server.tool(
     "veya_store_memory",
-    "Store local agent memory with BLAKE3 integrity (~/.veya). Not the product console guest proof list.",
+    "Store agent memory for the account behind this API key. No key, no write.",
     {
+      apiKey: z.string().optional(),
       environmentId: z.string().min(1),
       agentId: z.string().min(1),
       data: z.string().min(1),
     },
-    async ({ environmentId, agentId, data }) => {
-      try {
-        return toolJson(await storeMemory(environmentId, agentId, data));
-      } catch (err) {
-        return toolError(err);
-      }
+    async ({ apiKey, environmentId, agentId, data }) => {
+      const key = scopedKey(apiKey);
+      if (typeof key !== "string") return key.error;
+      const result = await scopedApi(
+        cfg,
+        key,
+        `/v1/environments/${encodeURIComponent(environmentId)}/scoped-memory`,
+        "POST",
+        { agentId, data },
+      );
+      return asTool(result);
     },
   );
 
   server.tool(
     "veya_read_memory",
-    "Read local agent memory and re-check BLAKE3 integrity",
+    "Read one memory row owned by this API key.",
     {
+      apiKey: z.string().optional(),
       environmentId: z.string().min(1),
       id: z.string().min(1),
     },
-    async ({ environmentId, id }) => {
-      try {
-        return toolJson(await readMemory(environmentId, id));
-      } catch (err) {
-        return toolError(err);
-      }
+    async ({ apiKey, environmentId, id }) => {
+      const key = scopedKey(apiKey);
+      if (typeof key !== "string") return key.error;
+      const result = await scopedApi(
+        cfg,
+        key,
+        `/v1/environments/${encodeURIComponent(environmentId)}/scoped-memory/${encodeURIComponent(id)}`,
+        "GET",
+      );
+      return asTool(result);
     },
   );
 
   server.tool(
     "veya_invalidate_memory",
-    "Nullify a local memory entry (spend-once semantics)",
+    "Nullify one memory row owned by this API key.",
     {
+      apiKey: z.string().optional(),
       environmentId: z.string().min(1),
       id: z.string().min(1),
     },
-    async ({ environmentId, id }) => {
-      try {
-        invalidateMemory(environmentId, id);
-        return toolJson({ nullified: true, environmentId, id });
-      } catch (err) {
-        return toolError(err);
-      }
+    async ({ apiKey, environmentId, id }) => {
+      const key = scopedKey(apiKey);
+      if (typeof key !== "string") return key.error;
+      const result = await scopedApi(
+        cfg,
+        key,
+        `/v1/environments/${encodeURIComponent(environmentId)}/scoped-memory/${encodeURIComponent(id)}`,
+        "DELETE",
+      );
+      return asTool(result);
     },
   );
 
   server.tool(
     "veya_client_run_consensus",
-    "Same as veya_run_consensus via VeyaClient defaults from this server config",
+    "Deprecated: use veya_run_consensus. Same server validator list. Needs a product API key.",
     {
+      apiKey: z.string().optional(),
       taskId: z.string().min(1),
       payload: z.record(z.unknown()).default({}),
     },
-    async ({ taskId, payload }) => {
+    async ({ apiKey, taskId, payload }) => {
+      const key = scopedKey(apiKey);
+      if (typeof key !== "string") return key.error;
       try {
+        assertKeyRate(key);
+        await readAccountForKey(cfg, key);
         const client = createReadClient(cfg);
         return toolJson(await client.runConsensus(taskId, payload));
       } catch (err) {
