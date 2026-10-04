@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServiceConfig } from "../config.js";
 import { apiRequest, toolError, toolJson, toolApiResult, type ApiResult } from "../api.js";
-import { requireProductApiKey, ROBINHOOD_TESTNET_FAUCET_URL } from "../credentials.js";
+import { requireProductApiKey, noFundsMessage, ROBINHOOD_TESTNET_FAUCET_URL } from "../credentials.js";
 import { mapWriteError, prepareUserPayer } from "../payer.js";
 import { createWriteClient, parseHexBytes } from "../sdk.js";
 
@@ -42,13 +42,13 @@ const payerPrivateKey = z
   .describe("User wallet private key that pays gas. Prefer VEYA_PAYER_PRIVATE_KEY on a self-hosted MCP.");
 
 /**
- * User-paid write tools. msg.sender is the user's wallet.
+ * Own-wallet write tools. msg.sender is the user's wallet.
  * The hosted relayer is never used on this path.
  */
 export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_writes_status",
-    "Reports how on-chain writes work on this server (user-paid vs operator relayer)",
+    "Reports how on-chain writes work on this server: your own wallet sends them, the host relayer does not",
     {},
     async () =>
       toolJson({
@@ -59,8 +59,8 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
           payerPrivateKey: "your wallet; set VEYA_PAYER_PRIVATE_KEY or pass the tool argument",
         },
         gasPayer: "The transaction is sent from the user's wallet, not the hosted relayer",
-        emptyWallet: "You don't have testnet tokens. Please get them for the transaction.",
-        faucetUrl: ROBINHOOD_TESTNET_FAUCET_URL,
+        emptyWallet: noFundsMessage(cfg.network),
+        faucetUrl: cfg.network === "testnet" ? ROBINHOOD_TESTNET_FAUCET_URL : undefined,
       }),
   );
 
@@ -94,7 +94,7 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
         );
         return toolJson({ txHash, explorer: client.explorerFor(txHash), from });
       } catch (err) {
-        return toolError(mapWriteError(err));
+        return toolError(mapWriteError(err, cfg.network));
       }
     },
   );
@@ -120,7 +120,7 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
         );
         return toolJson({ txHash, explorer: client.explorerFor(txHash), from });
       } catch (err) {
-        return toolError(mapWriteError(err));
+        return toolError(mapWriteError(err, cfg.network));
       }
     },
   );
@@ -193,7 +193,7 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
             : undefined,
         });
       } catch (err) {
-        return toolError(mapWriteError(err));
+        return toolError(mapWriteError(err, cfg.network));
       }
     },
   );
@@ -221,7 +221,7 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
           explorerEnv: client.explorerFor(result.environmentTx),
         });
       } catch (err) {
-        return toolError(mapWriteError(err));
+        return toolError(mapWriteError(err, cfg.network));
       }
     },
   );
@@ -253,7 +253,7 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
         );
         return toolJson({ txHash, explorer: client.explorerFor(txHash), from });
       } catch (err) {
-        return toolError(mapWriteError(err));
+        return toolError(mapWriteError(err, cfg.network));
       }
     },
   );
