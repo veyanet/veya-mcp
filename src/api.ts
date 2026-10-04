@@ -32,6 +32,7 @@ export async function apiRequest(
   const method = options.method ?? "GET";
   const headers: Record<string, string> = {
     Accept: "application/json",
+    "X-Veya-Network": cfg.network,
   };
   if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
@@ -47,11 +48,23 @@ export async function apiRequest(
     signal: AbortSignal.timeout(20_000),
   });
 
-  const body = await res.json().catch(async () => ({
-    raw: await res.text().catch(() => null),
-  }));
+  const text = await res.text().catch(() => "");
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = { raw: text };
+  }
 
   return { httpStatus: res.status, body };
+}
+
+/** Short failure text that does not include the request URL or the API key. */
+export function safeRequestMessage(err: unknown): string {
+  if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+    return "timeout";
+  }
+  return "API not reachable";
 }
 
 function jsonReplacer(_key: string, value: unknown): unknown {
