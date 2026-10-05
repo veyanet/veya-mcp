@@ -7,7 +7,7 @@ import { toolApiResult } from "../api.js";
 export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_describe",
-    "Honesty card: what this MCP is (AES sealed elsewhere, testnet 46630, not FHE/mainnet)",
+    "Service info: AES-256-GCM sealed execution and the selected settlement profile",
     {},
     async () => ({
       content: [
@@ -19,20 +19,23 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
               version: MCP_SERVICE_VERSION,
               publicUrl: cfg.publicMcpUrl,
               settlement: {
-                network: "Robinhood Chain testnet",
+                network: cfg.network === "mainnet" ? "Robinhood Chain mainnet" : "Robinhood Chain testnet",
                 chainId: cfg.chainId,
                 contract: cfg.contractAddress,
                 explorer: cfg.explorerUrl,
                 rpc: cfg.rpcUrl,
               },
               productApi: cfg.apiUrl,
-              sealed: "AES-256-GCM sealed-node (not FHE; TFHE is planned)",
-              mainnet: "Not a VEYA settlement claim (planned)",
+              sealed: "AES-256-GCM sealed-node",
+              mainnet:
+                cfg.network === "mainnet"
+                  ? "Settlement is Robinhood Chain Mainnet. The protocol contract is 0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674."
+                  : "This process is on Testnet. Unset ROBINHOOD_NETWORK selects Mainnet and the protocol contract 0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674.",
               writes:
-                "On-chain writes need a product API key (veya_dev_ / veya_live_) and YOUR funded testnet wallet. The hosted relayer is not the gas payer.",
-              toolSurface: "full (crypto, fleet, registry, product API, user-paid writes)",
+                "On-chain writes need a product API key (veya_dev_ / veya_live_) and your funded wallet on the selected network.",
+              toolSurface: "full (crypto, fleet, registry, product API, own-wallet writes)",
               fleet:
-                "Consensus/sealed capacity is backend-owned via the product API (api.veyanet.tech). Unreachable capacity fails closed — no invented quorum.",
+                "Consensus and sealed capacity are provided by the product API (api.veyanet.tech).",
               publicPasteUrl: "https://mcp.veyanet.tech/mcp",
             },
             null,
@@ -59,7 +62,7 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
                 ...ping,
                 chainId: ping.chainId.toString(),
                 expectedChainId: cfg.chainId,
-                config: client.describe(),
+                config: publicClientConfig(client.describe() as Record<string, unknown>),
               },
               null,
               2,
@@ -87,25 +90,58 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
     "veya_verify_transaction",
     "Verify a Veya.sol commitment from a Robinhood Chain tx hash",
     { txHash: z.string().min(66) },
-    async ({ txHash }) => {
-      const client = createReadClient(cfg);
-      const result = await client.verifyTransaction(txHash);
-      return {
-        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-      };
-    },
+    async ({ txHash }) => verifyTransactionTool(cfg, txHash),
   );
 
   server.tool(
     "veya_api_health",
-    "Probe the public VEYA API /health (api.veyanet.tech) — honest degraded when fleet down",
+    "Check the VEYA API /health status (api.veyanet.tech), including fleet status",
     {},
     async () => {
       const res = await fetch(`${cfg.apiUrl}/health`, {
+        headers: { Accept: "application/json", "X-Veya-Network": cfg.network },
         signal: AbortSignal.timeout(8000),
       });
       const body = await res.json().catch(() => ({}));
       return toolApiResult({ httpStatus: res.status, body });
     },
   );
+}
+
+export const NOT_VEYA_TX_MESSAGE =
+  "This transaction is not a Veya receipt: it does not call Veya.sol on this network, or it was not found.";
+
+/** Never returns a bare null: a non-Veya or unknown tx gives { ok:false, code:"NOT_VEYA_TX" }. */
+export async function verifyTransactionTool(
+  cfg: McpServiceConfig,
+  txHash: string,
+  verify: (hash: string) => Promise<unknown> = (hash) => createReadClient(cfg).verifyTransaction(hash),
+) {
+  const text = (v: unknown, isError = false) => ({
+    ...(isError ? { isError: true } : {}),
+    content: [{ type: "text" as const, text: JSON.stringify(v, null, 2) }],
+  });
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash.trim())) {
+    return text({ ok: false, code: "INVALID_TX_HASH", message: "txHash must be 0x followed by 64 hex characters." }, true);
+  }
+  let result: unknown;
+  try {
+    result = await verify(txHash.trim());
+  } catch (err) {
+    return text({ ok: false, code: "VERIFY_FAILED", message: err instanceof Error ? err.message : String(err) }, true);
+  }
+  if (result === null || result === undefined) {
+    return text({ ok: false, code: "NOT_VEYA_TX", txHash: txHash.trim(), network: cfg.network, message: NOT_VEYA_TX_MESSAGE }, true);
+  }
+  return text(result);
+}
+
+/** Public tool output never includes internal fleet URLs; counts only. */
+export function publicClientConfig(raw: Record<string, unknown>): Record<string, unknown> {
+  const { validatorNodes, sealedNodeUrl, ...rest } = raw;
+  return {
+    ...rest,
+    validators: Array.isArray(validatorNodes) ? validatorNodes.length : 0,
+    sealedNodeConfigured: Boolean(sealedNodeUrl),
+  };
 }
