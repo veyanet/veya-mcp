@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VeyaClient, type ProveSource } from "@veyanet/sdk";
 import type { McpServiceConfig } from "../config.js";
+import { prepareUserPayer } from "../payer.js";
+import { scopedKey } from "./scoped.js";
 
 /**
  * One proof entry. Without anchor, a digest is returned and nothing is sent.
@@ -10,16 +12,17 @@ import type { McpServiceConfig } from "../config.js";
 export function registerProofTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_prove",
-    "Prove text, canonical JSON, or a receipt hash. Anchor writes only when a payer key is passed.",
+    "Prove text, canonical JSON, or a receipt hash. Anchor writes only when a product API key and a payer key are passed.",
     {
       text: z.string().optional(),
       json: z.string().optional(),
       txHash: z.string().optional(),
       anchor: z.boolean().optional(),
       environmentId: z.string().optional(),
+      apiKey: z.string().optional(),
       payerPrivateKey: z.string().optional(),
     },
-    async ({ text, json, txHash, anchor, environmentId, payerPrivateKey }) => {
+    async ({ text, json, txHash, anchor, environmentId, apiKey, payerPrivateKey }) => {
       const chosen = [text, json, txHash].filter((value) => value !== undefined && value !== "");
       if (chosen.length !== 1) {
         return refused("Pass exactly one of text, json, or txHash.");
@@ -36,12 +39,24 @@ export function registerProofTools(server: McpServer, cfg: McpServiceConfig): vo
       } else {
         source = { kind: "tx", txHash: txHash! };
       }
+      let payer: string | undefined;
+      if (anchor) {
+        const key = scopedKey(apiKey);
+        if (typeof key !== "string") return key.error;
+        try {
+          const prepared = await prepareUserPayer(cfg, key, payerPrivateKey);
+          payer = prepared.privateKey;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return refused(message);
+        }
+      }
       const client = new VeyaClient({
         rpcUrl: cfg.rpcUrl,
         contractAddress: cfg.contractAddress,
         chainId: cfg.chainId,
         explorerUrl: cfg.explorerUrl,
-        payerPrivateKey: anchor ? payerPrivateKey : undefined,
+        payerPrivateKey: payer,
       });
       try {
         const proof = await client.proveInput(source, { anchor: Boolean(anchor), environmentId });
