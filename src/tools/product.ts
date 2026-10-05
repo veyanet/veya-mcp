@@ -98,7 +98,7 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_create_environment",
-    "Create a workspace in the product API. This does not spend gas and does not perform a payment. Guests and non-keys are refused. type is stored for the API and defaults to research when omitted.",
+    "Create a workspace in the product API. This does not spend gas and sends no transaction. Guests and non-keys are refused. type is stored for the API and defaults to research when omitted. Names that start with test, demo, tmp, sandbox, or e2e are refused. Use a real workspace name of at least 6 characters, or a name that starts with VEYA.",
     {
       apiKey,
       sessionToken,
@@ -143,7 +143,7 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_deploy_agent",
-    "Create an agent in a workspace. This does not spend gas and does not perform a payment. Limit the agent with permissionConfig.allowedTools. If allowedTools is omitted, the agent cannot call a tool. type is stored for the API and defaults to coordination when omitted.",
+    "Create an agent in a workspace. This does not spend gas and sends no transaction. Limit the agent with permissionConfig.allowedTools. If allowedTools is omitted, the agent cannot call a tool. type is stored for the API and defaults to coordination when omitted.",
     {
       apiKey,
       sessionToken,
@@ -247,8 +247,9 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
                 agentId: args.agentId,
                 eventType: args.eventType,
                 payload: args.payload,
-                disclose: args.disclose,
-                seal: args.seal,
+                // API field names. The old `disclose`/`seal` keys were silently dropped by the API schema.
+                discloseFields: args.disclose ?? [],
+                sealFields: args.seal ?? [],
               },
             },
           ),
@@ -329,7 +330,8 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
         const client = createWriteClient(cfg, prepared.privateKey);
         const hash = await client.hashBlake3(`${label}\n${content}`);
 
-        let environmentUuidHex = "0".repeat(32);
+        // Same shared content-proof environment the product API uses (bytes16 0x…01, registered on both networks).
+        let environmentUuidHex = "0".repeat(31) + "1";
         if (environmentId) {
           const plan = await apiRequest(
             cfg,
@@ -347,12 +349,31 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
           parseHexBytes(environmentUuidHex, 16),
           parseHexBytes(hash, 32),
         );
+        // Record the wallet anchor on the account so veya_list_proofs shows it.
+        let recorded = false;
+        let recordError: string | undefined;
+        try {
+          const saved = await apiRequest(cfg, "/v1/proofs/anchor/confirm", {
+            method: "POST",
+            apiKey: productKey,
+            body: { label, content, transactionHash: txHash, hashScheme: "blake3-label" },
+          });
+          recorded = saved.httpStatus < 400;
+          if (!recorded) {
+            const b = saved.body as { error?: string; code?: string };
+            recordError = b.code ?? b.error ?? `HTTP ${saved.httpStatus}`;
+          }
+        } catch (err) {
+          recordError = err instanceof Error ? err.message : String(err);
+        }
         return toolJson({
           txHash,
           explorer: client.explorerFor(txHash),
           from: prepared.address,
           hash,
           label,
+          recorded,
+          ...(recordError ? { recordError } : {}),
         });
       } catch (err) {
         if (err instanceof Error && err.message === "apiKey required") {
@@ -361,14 +382,14 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
         if (err instanceof Error && err.message === MINT_API_KEY_HINT) {
           return toolError(err);
         }
-        return toolError(mapWriteError(err));
+        return toolError(mapWriteError(err, cfg.network));
       }
     },
   );
 
   server.tool(
     "veya_verify_proof_api",
-    "Verify an anchored proof via product API public verify path",
+    "Check a commitment or anchor transaction through the product API. A registration transaction is not a proof and returns NOT_VEYA_TX.",
     { signature: z.string().min(1) },
     async ({ signature }) => {
       try {
