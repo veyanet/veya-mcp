@@ -6,6 +6,7 @@ import {
 } from "./config.js";
 import { registerPublicTools } from "./tools/public.js";
 import { registerProofTools } from "./tools/proof.js";
+import { registerSealDecisionTools } from "./tools/sealDecision.js";
 import { registerWriteTools } from "./tools/write.js";
 import { registerCryptoTools } from "./tools/crypto.js";
 import { registerFleetTools } from "./tools/fleet.js";
@@ -20,6 +21,7 @@ export function createMcpServer(cfg: McpServiceConfig): McpServer {
 
   registerPublicTools(server, cfg);
   registerProofTools(server, cfg);
+  registerSealDecisionTools(server, cfg);
   registerCryptoTools(server, cfg);
   registerFleetTools(server, cfg);
   registerRegistryTools(server, cfg);
