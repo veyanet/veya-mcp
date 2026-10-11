@@ -2,7 +2,7 @@
  * Full local MCP verification:
  * - User (no key): paste-URL stranger
  * - Product tools: apiKey required
- * - Writes: unfunded payer → exact testnet-tokens sentence
+ * - Writes: unfunded payer → exact Mainnet no-funds sentence
  * - Optional: VEYA_TEST_API_KEY + VEYA_PAYER_PRIVATE_KEY for a live user-paid tx
  *
  * Does not print secrets.
@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { loadConfig, MCP_SERVICE_VERSION } from "../src/config.js";
 import { createHttpApp } from "../src/http.js";
-import { NO_TESTNET_TOKENS, MINT_API_KEY_HINT } from "../src/credentials.js";
+import { NO_MAINNET_FUNDS, MINT_API_KEY_HINT } from "../src/credentials.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -110,7 +110,7 @@ async function main() {
       params: {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "veya-verify", version: "1.2.3" },
+        clientInfo: { name: "veya-verify", version: MCP_SERVICE_VERSION },
       },
     });
     assert.equal(init.status, 200, init.raw.slice(0, 300));
@@ -134,7 +134,7 @@ async function main() {
     {
       const r = await callTool(port, 10, "veya_describe");
       const t = toolText(r.json);
-      const ok = t.includes("1.2.3") && t.includes("46630");
+      const ok = t.includes(MCP_SERVICE_VERSION) && t.includes("Robinhood Chain mainnet");
       log("veya_describe", ok);
       results.push({ name: "veya_describe", ok, note: "user" });
     }
@@ -142,7 +142,7 @@ async function main() {
     {
       const r = await callTool(port, 11, "veya_ping_chain");
       const t = toolText(r.json);
-      const ok = r.status === 200 && (t.includes("46630") || t.includes("chainId"));
+      const ok = r.status === 200 && t.includes("chainId");
       log("veya_ping_chain", ok);
       results.push({ name: "veya_ping_chain", ok, note: "user" });
     }
@@ -223,7 +223,7 @@ async function main() {
       });
       const t = toolText(r.json);
       const ok =
-        t.includes(NO_TESTNET_TOKENS) ||
+        t.includes(NO_MAINNET_FUNDS) ||
         t.toLowerCase().includes("invalid") ||
         t.toLowerCase().includes("rejected") ||
         t.includes("403") ||
@@ -235,7 +235,7 @@ async function main() {
     {
       const status = await callTool(port, 31, "veya_writes_status");
       const t = toolText(status.json);
-      const ok = t.includes("userPaidWrites") && t.includes(NO_TESTNET_TOKENS);
+      const ok = t.includes("userPaidWrites") && t.includes(NO_MAINNET_FUNDS);
       log("veya_writes_status", ok);
       results.push({ name: "veya_writes_status", ok, note: "user-paid" });
     }
@@ -279,9 +279,9 @@ async function main() {
       const wt = toolText(write.json);
       const funded =
         wt.includes("txHash") ||
-        wt.includes(NO_TESTNET_TOKENS) ||
+        wt.includes(NO_MAINNET_FUNDS) ||
         wt.toLowerCase().includes("revert");
-      const fromUser = !wt.toLowerCase().includes("relayer") && (wt.includes("from") || wt.includes(NO_TESTNET_TOKENS));
+      const fromUser = !wt.toLowerCase().includes("relayer") && (wt.includes("from") || wt.includes(NO_MAINNET_FUNDS));
       log("live store_commitment user-paid", funded && fromUser);
       results.push({
         name: "live user-paid write",
