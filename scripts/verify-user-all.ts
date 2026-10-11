@@ -5,13 +5,14 @@
 import { randomBytes } from "node:crypto";
 import { ethers } from "ethers";
 import { MCP_SERVICE_VERSION } from "../src/config.js";
-import { MINT_API_KEY_HINT, NO_TESTNET_TOKENS } from "../src/credentials.js";
+import { MINT_API_KEY_HINT, NO_MAINNET_FUNDS } from "../src/credentials.js";
 
-const API = (process.env.VEYA_API_URL || "http://127.0.0.1:8799").replace(/\/$/, "");
+const API = (process.env.VEYA_API_URL || "").replace(/\/$/, "");
+if (!API) throw new Error("Set VEYA_API_URL to the product API under test");
 const MCP_PORT = Number(process.env.MCP_PORT || 8788);
-const RPC = "https://rpc.testnet.chain.robinhood.com";
-const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
-const KNOWN_TX = "0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8";
+const RPC = process.env.ROBINHOOD_MAINNET_RPC_URL || "https://rpc.mainnet.chain.robinhood.com";
+const EXPLORER = "https://robinhoodchain.blockscout.com";
+const KNOWN_TX = "0x0ec3dc1ebb27a1d51e7faf8255f14bd815a38e4f3b1e5af572f094c40ce5930e";
 
 const EXPECTED_TOOLS = [
   "veya_describe",
@@ -170,15 +171,14 @@ async function main() {
   console.log(`[user] MCP ${MCP_SERVICE_VERSION} :${MCP_PORT} API=${API}`);
 
   const health = await fetch(`http://127.0.0.1:${MCP_PORT}/health`).then((r) => r.json());
-  check("http", "GET /health 1.2.3 user-paid", health.version === "1.2.3" && health.writesEnabled === true && health.operatorRelayerWrites === false);
+  check("http", `GET /health ${MCP_SERVICE_VERSION} own-wallet writes`, health.version === MCP_SERVICE_VERSION && health.network === "mainnet" && health.writesEnabled === true && health.operatorRelayerWrites === false);
 
   const landing = await fetch(`http://127.0.0.1:${MCP_PORT}/`).then((r) => r.text());
   check(
     "http",
-    "GET / landing is 1.2.3 user-paid copy",
-    landing.includes("@veyanet/mcp@1.2.3") &&
+    `GET / info page shows ${MCP_SERVICE_VERSION}`,
+    landing.includes(MCP_SERVICE_VERSION) &&
       landing.includes("https://mcp.veyanet.tech/mcp") &&
-      landing.toLowerCase().includes("your testnet") &&
       !landing.toLowerCase().includes("fhe ran"),
   );
 
@@ -189,7 +189,7 @@ async function main() {
     params: {
       protocolVersion: "2024-11-05",
       capabilities: {},
-      clientInfo: { name: "user-all", version: "1.2.3" },
+      clientInfo: { name: "user-all", version: MCP_SERVICE_VERSION },
     },
   });
   check("session", "MCP initialize like Cursor/Claude", init.status === 200 && Boolean(init.json?.result));
@@ -201,11 +201,12 @@ async function main() {
 
   const describe = await call("veya_describe");
   const dt = toolText(describe.json);
-  check("stranger", "veya_describe no key", !isError(describe.json) && dt.includes("1.2.3") && dt.includes("46630") && dt.includes("AES-256-GCM"));
+  check("stranger", "veya_describe no key", !isError(describe.json) && dt.includes(MCP_SERVICE_VERSION) && dt.includes("Robinhood Chain mainnet") && dt.includes("AES-256-GCM"));
 
   const ping = await call("veya_ping_chain");
   const pt = toolText(ping.json);
-  check("stranger", "veya_ping_chain 46630", !isError(ping.json) && pt.includes("46630"));
+  const pj = parseJson(pt);
+  check("stranger", "veya_ping_chain matches the Mainnet profile", !isError(ping.json) && pj?.chainId !== undefined && String(pj?.chainId) === String(pj?.expectedChainId));
 
   const hashed = await call("veya_hash_blake3", { data: `user-perspective-${Date.now()}` });
   const ht = parseJson(toolText(hashed.json));
@@ -221,7 +222,7 @@ async function main() {
 
   const writes = await call("veya_writes_status");
   const wt = toolText(writes.json);
-  check("stranger", "veya_writes_status user-paid + tokens sentence", !isError(writes.json) && wt.includes("userPaidWrites") && wt.includes(NO_TESTNET_TOKENS) && wt.includes("faucet.testnet.chain.robinhood.com"));
+  check("stranger", "veya_writes_status own-wallet + funds sentence", !isError(writes.json) && wt.includes("userPaidWrites") && wt.includes(NO_MAINNET_FUNDS));
 
   const stats = await call("veya_public_stats");
   check("registry", "veya_public_stats", !isError(stats.json) && Number(parseJson(toolText(stats.json))?.httpStatus) < 500);
@@ -372,6 +373,10 @@ async function main() {
     check("guest", "guest cannot deploy agent", isError(gDeploy.json));
   }
 
+  if (process.env.VEYA_USER_ALL_MAINNET_WRITES !== "1") {
+    check("build", "Mainnet write lane skipped (set VEYA_USER_ALL_MAINNET_WRITES=1 to spend real ETH)", true);
+    return summarize();
+  }
   const relayerKey = process.env.VEYA_RELAYER_PRIVATE_KEY?.trim();
   if (!relayerKey) throw new Error("VEYA_RELAYER_PRIVATE_KEY is required");
   const relayer = new ethers.Wallet(relayerKey);
@@ -471,7 +476,7 @@ async function main() {
   check(
     "write",
     "empty matching wallet exact tokens sentence",
-    isError(empty.json) && toolText(empty.json).includes(NO_TESTNET_TOKENS),
+    isError(empty.json) && toolText(empty.json).includes(NO_MAINNET_FUNDS),
   );
 
   const mismatch = await call("veya_store_commitment", {
@@ -489,7 +494,7 @@ async function main() {
   } else {
     const fundTx = await relayer.connect(provider).sendTransaction({ to: user.address, value: fundWei });
     await fundTx.wait(1);
-    check("write", "fund user testnet ETH", (await provider.getBalance(user.address)) > 0n);
+    check("write", "fund user ETH", (await provider.getBalance(user.address)) > 0n);
 
     const reg = await call("veya_register_environment", {
       apiKey,
@@ -622,6 +627,10 @@ async function main() {
     check("fleet", "veya_verify_secure_message", !isError(vsm.json));
   }
 
+  summarize();
+}
+
+function summarize() {
   const groups = [...new Set(results.map((r) => r.group))];
   console.log("\n=== USER PERSPECTIVE SUMMARY ===");
   for (const g of groups) {
