@@ -4,38 +4,14 @@
  * operator relayer only so we can prove explorer `from` is NOT the relayer.
  */
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { ethers } from "ethers";
 import { loadConfig, MCP_SERVICE_VERSION } from "../src/config.js";
 import { createHttpApp } from "../src/http.js";
 import { NO_TESTNET_TOKENS } from "../src/credentials.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 const API = (process.env.VEYA_API_URL || "https://api.veyanet.tech").replace(/\/$/, "");
 const RPC = "https://rpc.testnet.chain.robinhood.com";
 const EXPLORER = "https://explorer.testnet.chain.robinhood.com";
-const BACKEND_ENV = resolve(__dirname, "../../backend/.env");
-
-function loadNamedEnv(file: string, keys: string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!existsSync(file)) return out;
-  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t || t.startsWith("#")) continue;
-    const i = t.indexOf("=");
-    if (i <= 0) continue;
-    const k = t.slice(0, i).trim();
-    if (!keys.includes(k)) continue;
-    let v = t.slice(i + 1).trim();
-    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-      v = v.slice(1, -1);
-    }
-    out[k] = v;
-  }
-  return out;
-}
 
 function toolText(json: unknown): string {
   const c = (json as { result?: { content?: Array<{ text?: string }> } })?.result?.content?.[0]?.text;
@@ -136,9 +112,9 @@ function check(name: string, ok: boolean, note = "") {
 }
 
 async function main() {
-  const backend = loadNamedEnv(BACKEND_ENV, ["VEYA_RELAYER_PRIVATE_KEY"]);
-  assert.ok(backend.VEYA_RELAYER_PRIVATE_KEY, "backend .env relayer key missing");
-  const relayer = new ethers.Wallet(backend.VEYA_RELAYER_PRIVATE_KEY);
+  const relayerKey = process.env.VEYA_RELAYER_PRIVATE_KEY?.trim();
+  assert.ok(relayerKey, "VEYA_RELAYER_PRIVATE_KEY is required");
+  const relayer = new ethers.Wallet(relayerKey);
   const user = ethers.Wallet.createRandom();
   const other = ethers.Wallet.createRandom();
   const provider = new ethers.JsonRpcProvider(RPC);
