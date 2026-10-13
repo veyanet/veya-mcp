@@ -4,8 +4,8 @@
 
 This document explains how the MCP server is built, who talks to whom, and what a tool call actually does. Words stay simple. Details stay real.
 
-[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.3-cb3837?style=flat-edge)](../package.json)
-[![Robinhood Testnet](https://img.shields.io/badge/Testnet-Chain%20ID%2046630-blue?style=flat-edge)](https://explorer.testnet.chain.robinhood.com/address/0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84)
+[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.8-cb3837?style=flat-edge)](../package.json)
+[![Robinhood Mainnet](https://img.shields.io/badge/Mainnet-Robinhood%20Chain-blue?style=flat-edge)](https://robinhoodchain.blockscout.com/address/0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674)
 [![Public MCP](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9?style=flat-edge)](https://mcp.veyanet.tech/mcp)
 
 **[Documentation Hub](./README.md)** • **[Tools](./TOOLS.md)** • **[Quickstart](./QUICKSTART.md)** • **[Network pin](./NETWORK_PIN.md)** • **[SDK bridge](./SDK_BRIDGE.md)**
@@ -58,7 +58,7 @@ Live product facts:
 |-------|-------------------|
 | Contract | `Veya.sol` is a protocol contract (commitments, environments, attestations). |
 | Sealed path | **AES-256-GCM** on sealed-node (software process boundary). |
-| Settlement | Robinhood **testnet 46630**. |
+| Settlement | Mainnet by default. Testnet when `ROBINHOOD_NETWORK=testnet`. |
 | Sessions | Product API keys (`veya_dev_` / `veya_live_`) come from the product site. MCP forwards `apiKey`. |
 | Transport | `veya-mcp` is an **HTTP** Streamable HTTP server. |
 | Quorum | Agreement is matching BLAKE3 hashes (2-of-3). Unreachable nodes return `consensus_reached: false`. |
@@ -69,17 +69,17 @@ Live product facts:
 
 | Field | Value |
 |-------|-------|
-| npm package | `@veyanet/mcp` **1.2.3** |
-| SDK it depends on | `@veyanet/sdk` **^1.2.4** |
+| npm package | `@veyanet/mcp` **1.2.8** |
+| SDK it depends on | `@veyanet/sdk` **^1.2.8** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Landing | `https://mcp.veyanet.tech/` |
 | MCP health | `https://mcp.veyanet.tech/health` |
 | Product API | `https://api.veyanet.tech` |
-| Chain | Robinhood Chain testnet, id **46630** (`0xb626`) |
-| Contract | `Veya.sol` at `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
-| RPC | `https://rpc.testnet.chain.robinhood.com` |
-| Explorer | `https://explorer.testnet.chain.robinhood.com` |
-| Default Node listen | `0.0.0.0:8788` (behind TLS on the public host) |
+| Chain | Robinhood Chain Mainnet. Testnet is the option |
+| Contract | Mainnet `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674`. Testnet `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| RPC | Mainnet `https://rpc.mainnet.chain.robinhood.com`. Testnet `https://rpc.testnet.chain.robinhood.com` |
+| Explorer | Mainnet `https://robinhoodchain.blockscout.com`. Testnet `https://explorer.testnet.chain.robinhood.com` |
+| Default Node listen | `<your-mcp-host>` (behind TLS on the public host) |
 
 A known testnet tx used in docs (sealed-execution commitment path):
 
@@ -87,7 +87,7 @@ A known testnet tx used in docs (sealed-execution commitment path):
 0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8
 ```
 
-Product API `/health` may say **`degraded`** when validators/sealed are not running on the API host. That is an honest fleet report. MCP describe and chain ping can still work.
+Product API /health shows fleet status. MCP describe and chain ping work independently.
 
 ---
 
@@ -95,7 +95,7 @@ Product API `/health` may say **`degraded`** when validators/sealed are not runn
 
 ```mermaid
 flowchart LR
-  subgraph Stranger["Anyone with Claude / Cursor"]
+  subgraph Public user["Anyone with Claude / Cursor"]
     Paste["Paste mcp.veyanet.tech/mcp"]
   end
   subgraph Dev["App / backend author"]
@@ -114,7 +114,7 @@ flowchart LR
 | Curious user | Public MCP URL. Optional: `veya_guest_login` for Use proofs. |
 | TypeScript integrator | `@veyanet/sdk` from npm. MCP is optional. |
 | Operator of `mcp.veyanet.tech` | This repo (or the npm binary), TLS, env pins, usually **writes off**. |
-| Operator who wants chain writes from MCP | Product API key + **your** funded testnet wallet (`VEYA_PAYER_PRIVATE_KEY`). |
+| Operator who wants chain writes from MCP | Product API key + **your** funded wallet on the selected profile (`VEYA_PAYER_PRIVATE_KEY`). |
 
 ---
 
@@ -140,11 +140,11 @@ flowchart TB
     Evm["EvmAnchor + ping / verify"]
     Cons["runConsensus"]
     Seal["protectedExec"]
-    Mem["storeMemory ~/.veya"]
+    Mem["account memory by API key"]
   end
 
   subgraph Outside["Outside this process"]
-    RPC["Robinhood RPC 46630"]
+    RPC["Robinhood RPC"]
     API["api.veyanet.tech"]
     Val["Validators POST /execute"]
     SN["Sealed-node POST /protected"]
@@ -165,7 +165,7 @@ flowchart TB
   Cons --> Val
   Seal --> SN
   Api --> API
-  Mem --> Disk["MCP machine disk"]
+  Mem --> API
 ```
 
 ASCII version of the same idea:
@@ -176,7 +176,7 @@ MCP client (Claude / Cursor)
         ▼
 ┌───────────────────────────────────────────┐
 │  @veyanet/mcp                             │
-│  owns: HTTP, tool list, user-paid writes  │
+│  owns: HTTP, tool list, own-wallet writes  │
 │  does not own: crypto math, Veya.sol ABI  │
 └───────────┬─────────────────┬─────────────┘
             │                 │
@@ -210,7 +210,7 @@ Each layer only talks to the layer below it for its job. MCP does not re-impleme
 | L3  Tool policy                                                  |
 |     registerPublic / crypto / fleet / registry / product / write |
 |     product apiKey forwarded as X-Api-Key                        |
-|     user-paid writes via EvmAnchor                               |
+|     own-wallet writes via EvmAnchor                               |
 +--------------------------------+---------------------------------+
                                  |
           +----------------------+----------------------+
@@ -225,7 +225,7 @@ Each layer only talks to the layer below it for its job. MCP does not re-impleme
                                  |
 +--------------------------------v---------------------------------+
 | L1  Settlement                                                   |
-|     Veya.sol on Robinhood testnet 46630                          |
+|     Veya.sol on the selected profile (Mainnet)             |
 +------------------------------------------------------------------+
 ```
 
@@ -246,7 +246,7 @@ flowchart TB
     FLEET["Validator + sealed"]
   end
   subgraph L1["L1 Chain"]
-    SOL["Veya.sol 46630"]
+    SOL["Veya.sol selected profile"]
   end
   IDE --> EX --> SV
   SV --> SDK
@@ -329,7 +329,7 @@ Source of truth is this repo’s `src/` tree.
 | `src/http.ts` | Express app, CORS, health, `/mcp`, `/mcp/session`, landing HTML. |
 | `src/landingPage.ts` | HTML for `GET /`. Always shows the public paste URL. |
 | `src/server.ts` | Builds `McpServer`, registers all tool groups. |
-| `src/auth.ts` | Optional `Authorization: Bearer` parser (unused on the user-paid write path). |
+| `src/auth.ts` | Optional `Authorization: Bearer` parser (unused on the own-wallet write path). |
 | `src/sdk.ts` | `VeyaClient` factories + hex → bytes helper. |
 | `src/api.ts` | `fetch` wrapper to the product API + JSON tool replies. |
 | `src/tools/public.ts` | Describe, ping, hash, verify tx, API health. |
@@ -339,7 +339,7 @@ Source of truth is this repo’s `src/` tree.
 | `src/tools/product.ts` | Guest/session product API tools. |
 | `src/tools/write.ts` | On-chain writes **or** `veya_writes_status`. |
 
-Health JSON (`GET /health`) includes: `status`, `service` (`@veyanet/mcp`), `version`, `publicMcpUrl`, `chainId`, `contractAddress`, `writesEnabled`, `sealed` (`AES-256-GCM`), `settlement` (`Robinhood Chain testnet 46630`). Keys stay off this payload.
+Health JSON (`GET /health`) includes: `status`, `service` (`@veyanet/mcp`), `version`, `publicMcpUrl`, `network`, `chainId`, `contractAddress`, `writesEnabled`, `sealed` (`AES-256-GCM`), `settlement` (`Robinhood Chain` plus the selected profile). This tree's default is Mainnet. Testnet is the option. Keys stay off this payload.
 
 ---
 
@@ -358,7 +358,7 @@ flowchart TB
   S --> W["write.ts"]
   P --> RPC["Robinhood RPC"]
   C --> PQ["SDK pq"]
-  F --> VAL["validators / sealed / ~/.veya"]
+  F --> VAL["validators / sealed / API-key memory"]
   R --> API["/public/*"]
   R --> RPC
   PR --> API
@@ -367,14 +367,14 @@ flowchart TB
 
 | Group | Auth on the MCP tool | Typical backend |
 |-------|----------------------|-----------------|
-| Public honesty | None | SDK + `GET {api}/health` |
+| Service info | None | SDK + `GET {api}/health` |
 | Crypto | None | SDK in this process |
 | Fleet | None on MCP (fleet may still be unreachable) | SDK HTTP to configured node URLs |
 | Registry | None | Product `/public/*` or SDK `eth_call` |
 | Product | `apiKey` argument | Product `/auth`, `/v1`, `/api/verify` |
 | Writes | `apiKey` + user payer | SDK `EvmAnchor` from the user's wallet |
 
-Approximate count: **~49** tools. User-paid writes are always listed.
+**51 tools**. Own-wallet writes are always listed.
 
 ---
 
@@ -392,31 +392,29 @@ Approximate count: **~49** tools. User-paid writes are always listed.
 │  MCP host                                                   │
 │  Trusts: @veyanet/sdk, Robinhood RPC, product API TLS       │
 │  Holds (optional): VEYA_PAYER_PRIVATE_KEY for self-host writes  │
-│  May reach: 127.0.0.1:7701–7703 and :7800 IF it shares a    │
+│  May reach: <validator-1..3-url> and :<sealed-port> IF it shares a    │
 │  machine with the fleet (typical on the API host)           │
 └───────────────┬─────────────────────────────┬───────────────┘
                 │                             │
                 ▼                             ▼
-        Robinhood testnet              api.veyanet.tech
+        Robinhood Chain                api.veyanet.tech
         (public RPC)                   (rooms, guest, registry)
 ```
 
-### What a stranger can believe after `veya_verify_transaction`
+### What a public user can believe after `veya_verify_transaction`
 
-- A receipt exists on chain 46630.
+- A receipt exists on the selected profile. Mainnet is Robinhood Chain Mainnet. Testnet receipts stay on Testnet.
 - Parsed `Veya.sol` events match what the SDK decoder says.
-
-They still cannot treat that as “FHE ran” or “mainnet settled.”
 
 ### What guest JWT proves
 
 - The product API issued a **Use-only** session (`POST /auth/guest`).
-- It does **not** prove the caller owns a unique wallet.
+- It proves the commitment exists on-chain.
 - Build stays 403.
 
 ### Default loopback URLs (operators only)
 
-`loadConfig()` defaults validators to `http://127.0.0.1:7701,7702,7703` and sealed to `http://127.0.0.1:7800`. That is so an MCP process **on the same host as the fleet** can reach it without extra env. It is **not** the stranger paste URL. Never put those loopback addresses in landing copy as “how to connect.”
+`loadConfig()` defaults validators to `<validator-1-url>,<validator-2-url>,<validator-3-url>` and sealed to `<sealed-node-url>`. That is so an MCP process **on the same host as the fleet** can reach it without extra env. It is **not** the public user paste URL. Never put those loopback addresses in landing copy as “how to connect.”
 
 ---
 
@@ -426,12 +424,12 @@ They still cannot treat that as “FHE ran” or “mainnet settled.”
 flowchart TD
   K1{"product apiKey?"}
   K2{"payerPrivateKey?"}
-  K3{"wallet has testnet ETH?"}
+  K3{"wallet has ETH?"}
   K1 -->|no| Fail1["apiKey required"]
   K2 -->|no| Fail2["payerPrivateKey required"]
   K1 -->|yes| K2
   K2 -->|yes| K3
-  K3 -->|no| Fail3["You don't have testnet tokens"]
+  K3 -->|no| Fail3["Wallet has no ETH"]
   K3 -->|yes| Tx["EvmAnchor send from user wallet"]
 ```
 
@@ -455,7 +453,7 @@ If the MCP host’s `VEYA_VALIDATOR_NODES` still point at empty loopback, `veya_
 
 Boundnet tools `veya_set_tool_policy` / `veya_route_message` use the **SDK in-process map**. Restarting MCP clears it. Hosted room policy is a **different** table on the product API (`veya_boundnet_invoke`).
 
-Local memory tools write `~/.veya` on the **MCP machine**. That is not the console “My proofs” list.
+Memory tools save on the account behind the API key, through the product API. No key, no access. That store is not the console “My proofs” list.
 
 ---
 
@@ -465,7 +463,7 @@ Local memory tools write `~/.veya` on the **MCP machine**. That is not the conso
 |------|-----|
 | Agent paste URL | MCP |
 | Human product console | `https://app.veyanet.tech` (product, not this package) |
-| Guest stamp a text proof | Product console Use-mode. MCP `veya_anchor_proof` is user-paid and refuses guest. |
+| Guest stamp a text proof | Product console Use-mode. MCP `veya_anchor_proof` is own-wallet and refuses guest. |
 | TypeScript in your process | `@veyanet/sdk` |
 | Create a Build room | Wallet session on the **API**, not guest |
 
@@ -482,9 +480,9 @@ Guest is a **shared demo Use path**. It is not the official token-customer story
 | Tool registry | RAM, rebuilt every `POST /mcp` (stateless) |
 | Optional MCP session transports | RAM `Map` on `/mcp/session` only |
 | In-process Boundnet allow list | RAM in this Node process |
-| Local agent memory | `~/.veya` on the MCP host |
+| Agent memory | Product API, one box per API key |
 | Guest proofs, rooms, public agents | Product API database |
-| Commitments, environments, attestations | `Veya.sol` mappings on chain 46630 |
+| Commitments, environments, attestations | `Veya.sol` on the selected profile. Mainnet is Robinhood Chain Mainnet. Testnet is Robinhood Chain Testnet |
 | Relayer key | Server env only |
 
 Nothing in MCP persists guest JWTs.
@@ -500,7 +498,7 @@ MCP does not pick algorithms. It calls the SDK.
 | BLAKE3-256 | Commitments, memory integrity, pubkey fingerprint |
 | ML-DSA-44 (FIPS 204) | Agent/operator identity, validator signatures, secure-message sign |
 | Kyber-768 (FIPS 203) | `veya_route_secure_message` session wrap |
-| AES-256-GCM | Sealed-node payload seal (**not** FHE) |
+| AES-256-GCM | Sealed-node payload seal |
 | secp256k1 | User wallet `msg.sender` for `Veya.sol` gas (classical EVM) |
 
 On-chain ML-DSA **verify** is not done inside the EVM. The chain stores hashes and optional signature bytes. Auditors verify with the SDK.
@@ -517,10 +515,10 @@ On-chain ML-DSA **verify** is not done inside the EVM. The chain stores hashes a
 | Product API `degraded` | Health body says validators/sealed unreachable | Fleet on the **API** host — MCP describe can still work |
 | Validators down | `consensus_reached: false` or tool error | Do not treat as success |
 | Sealed down | `veya_sealed_execute` / protected exec error | Fail closed |
-| Guest + Build tool | MCP `isError` / product API 403 | Mint a product API key |
-| Unfunded payer | Exact testnet-tokens sentence | Fund the wallet that minted the key |
+| Guest + Build tool | MCP `isError` / product API 403 | Create a product API key at app.veyanet.tech |
+| Unfunded payer | Mainnet: no ETH on Robinhood Chain. Testnet: the testnet-tokens sentence | Fund the wallet that minted the key |
 | Wrong payer wallet | Does not match the API key wallet | Use the same wallet |
-| Wrong chain id | SDK `CHAIN_MISMATCH` on writes | Pins must stay 46630 |
+| Wrong chain id | SDK `CHAIN_MISMATCH` on writes | Keep RPC on the selected profile: Mainnet, or Testnet |
 
 JSON body over **1 MB** is rejected by Express.
 
@@ -533,13 +531,13 @@ CORS: empty `CORS_ORIGIN` rejects **browser** `Origin` headers. Connectors with 
 These must stay true in code and docs:
 
 1. Public paste URL is `https://mcp.veyanet.tech/mcp`.
-2. Settlement chain id is **46630** unless an operator deliberately self-hosts a different pin (then they must not call it “VEYA production”).
+2. The default settlement profile is Mainnet. Testnet is `ROBINHOOD_NETWORK=testnet`.
 3. Sealed is **AES-256-GCM**.
 4. `Veya.sol` is a protocol contract.
 5. On-chain writes require a product API key and the user's funded wallet (`msg.sender` is the user).
 6. Guest Build is **403**.
 7. Unreachable quorum reports `consensus_reached: false`.
-8. `/health` and `veya_describe` stay honest about testnet and sealed.
+8. `/health` and `veya_describe` report the selected network and the sealed mode.
 9. Keep `.env` and funded keys off git.
 10. MCP uses `@veyanet/sdk` for crypto and chain writes.
 
@@ -551,15 +549,15 @@ These must stay true in code and docs:
 |------|----------------|
 | MCP | Model Context Protocol — JSON-RPC tools for agents |
 | Streamable HTTP | MCP over `POST` + JSON or SSE, not stdio |
-| Honesty card | `veya_describe` JSON (and `/health`) stating what is live |
+| Service info | `veya_describe` JSON (and `/health`) stating what is live |
 | Product API | Hosted HTTP at `api.veyanet.tech` (rooms, guest, registry) |
 | Fleet | Validator nodes + sealed-node owned by that API (or a self-host operator) |
 | Boundnet | Deny-by-default tool routing between agents |
 | Use | Guest-allowed product path (list/stamp proofs) |
 | Build | Create rooms, deploy agents, protected exec — wallet, not guest |
-| Relayer | Unused on the user-paid MCP write path. Gas is paid by the user's wallet. |
+| Relayer | Unused on the own-wallet MCP write path. Gas is sent from the user's wallet. |
 | Commitment | 32-byte digest stored on chain |
-| Fail closed | Error or `false` instead of a fake success |
+| Fail closed | Returns an error or false when a step can't complete |
 
 ## Related docs
 
