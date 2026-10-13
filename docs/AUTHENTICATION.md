@@ -13,7 +13,7 @@ How this server decides who may **read**, who may use the **product API**, and w
 3. [Product API key](#3-product-api-key)
 4. [Guest vs wallet](#4-guest-vs-wallet)
 5. [On-chain writes (your wallet)](#5-on-chain-writes-your-wallet)
-6. [No testnet tokens](#6-no-testnet-tokens)
+6. [Funding your wallet](#6-funding-your-wallet)
 7. [Where to put the private key](#7-where-to-put-the-private-key)
 8. [Failure messages](#8-failure-messages)
 9. [Related reading](#9-related-reading)
@@ -30,7 +30,7 @@ People mix these up. They are not interchangeable.
 | Product API key (`veya_dev_…` / `veya_live_…`) | Product site, after wallet login | Tool argument `apiKey` → MCP → `X-Api-Key` toward `api.veyanet.tech` | Rooms, proofs list, Build on the product API |
 | Your wallet private key | You | Tool argument `payerPrivateKey` or env `VEYA_PAYER_PRIVATE_KEY` | On-chain writes. `msg.sender` is **your** address |
 
-The hosted relayer is **not** the gas payer for API-key writes. If you use a product API key, the transaction is from your wallet. You need Robinhood testnet ETH.
+API-key writes are sent from your wallet. You need ETH on Robinhood Chain.
 
 ```mermaid
 flowchart LR
@@ -56,12 +56,13 @@ flowchart LR
 
 These tools run for anyone who can reach the MCP URL:
 
-- Honesty: `veya_describe`, `veya_ping_chain`, `veya_hash_blake3`, `veya_verify_transaction`, `veya_api_health`
-- `veya_writes_status` (explains user-paid writes)
+- Service info: `veya_describe`, `veya_ping_chain`, `veya_hash_blake3`, `veya_verify_transaction`, `veya_api_health`
+- `veya_writes_status` (explains own-wallet writes)
 - PQ: `veya_pq_keygen`, `veya_pq_sign`, `veya_pq_verify`, `veya_pq_fingerprint`
-- Fleet / Boundnet / local memory (still fail closed if nodes are down)
 - Public registry and on-chain **reads**
 - `veya_verify_proof_api`
+
+Account memory, consensus, and sealed execution need an API key. They are not in the public list.
 
 `GET /` and `GET /health` also have no auth. Health never prints keys.
 
@@ -69,7 +70,7 @@ These tools run for anyone who can reach the MCP URL:
 
 ## 3. Product API key
 
-Mint the key on the product site (wallet login). Guests **cannot** mint keys.
+Create the key at [app.veyanet.tech](https://app.veyanet.tech): connect your wallet, open **System → API Keys**, and create a Dev (`veya_dev_…`) or Live (`veya_live_…`) key. The key is shown once. Guests **cannot** mint keys.
 
 Pass it as the tool argument `apiKey`. MCP forwards product keys as:
 
@@ -95,7 +96,7 @@ If `apiKey` is missing, product tools return `{ "error": "apiKey required" }` in
 | List showcase / Use environments | Yes (scoped) | Yes |
 | Create environment (API row) | Refused by MCP | Yes |
 | Deploy agent / protected execution | Refused by MCP / API 403 | Yes |
-| On-chain write | Refused. Mint a product API key and fund your wallet. | Yes, from **your** wallet |
+| On-chain write | Refused. Create a product API key at app.veyanet.tech and fund your wallet. | Yes, from **your** wallet |
 
 Creating an environment in the product API does **not** spend gas. Registering that room on `Veya.sol` does.
 
@@ -103,7 +104,7 @@ Creating an environment in the product API does **not** spend gas. Registering t
 
 ## 5. On-chain writes (your wallet)
 
-Write tools talk to `Veya.sol` through `@veyanet/sdk` `EvmAnchor`. They spend **your** testnet ETH.
+Write tools talk to `Veya.sol` through `@veyanet/sdk` `EvmAnchor`. They spend your ETH on the selected network.
 
 Every write still:
 
@@ -128,15 +129,23 @@ SDK writes still call `ensureRobinhoodChain()`. Wrong `eth_chainId` → fail clo
 
 ---
 
-## 6. No testnet tokens
+## 6. Funding your wallet
 
-If the wallet balance is `0`, or the node returns insufficient funds, the tool returns exactly:
+If the wallet balance is `0`, or the node returns insufficient funds, the tool returns one sentence for the selected profile.
+
+Mainnet:
 
 ```text
-You don't have testnet tokens. Please get them for the transaction.
+Your wallet has no ETH on Robinhood Chain. Add funds and try again.
 ```
 
-Fund the **same** address that minted the API key, on Robinhood Chain testnet (chain id **46630**), using https://faucet.testnet.chain.robinhood.com/
+Testnet, when `ROBINHOOD_NETWORK=testnet`:
+
+```text
+Mainnet: 'Your wallet has no ETH on Robinhood Chain. Add funds and try again.' Testnet: 'You don't have testnet tokens. Please get them for the transaction.'
+```
+
+Fund the **same** address that minted the API key. On Testnet, use https://faucet.testnet.chain.robinhood.com/
 
 ---
 
@@ -161,10 +170,10 @@ Never log, screenshot, or commit the key. MCP does not put it in `/health`, land
 | Situation | Typical result |
 |-----------|----------------|
 | Missing `apiKey` | `{ "error": "apiKey required" }` |
-| Guest JWT on a write tool | Mint a product API key on the product site and fund your wallet. |
+| Guest JWT on a write tool | Create a product API key at https://app.veyanet.tech (System → API Keys) and fund your wallet. |
 | Missing payer | `payerPrivateKey required` |
 | Payer ≠ API key wallet | payerPrivateKey does not match the wallet on this API key |
-| Empty / unfunded wallet | `You don't have testnet tokens. Please get them for the transaction.` |
+| Empty / unfunded wallet | `Mainnet: 'Your wallet has no ETH on Robinhood Chain. Add funds and try again.' Testnet: 'You don't have testnet tokens. Please get them for the transaction.'` |
 | Guest + create environment | MCP `isError` (mint a product API key) |
 | Wrong chain | SDK chain mismatch on send |
 
