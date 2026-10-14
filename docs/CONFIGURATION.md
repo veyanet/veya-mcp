@@ -2,7 +2,7 @@
 
 How the Node process learns chain pins, API URL, fleet URLs, and write keys.
 
-**Strangers do not configure this.** They paste `https://mcp.veyanet.tech/mcp`. This file is for people who **self-host** `@veyanet/mcp` or operate `mcp.veyanet.tech`.
+**Public users do not configure this.** They paste `https://mcp.veyanet.tech/mcp`. This file is for people who **self-host** `@veyanet/mcp` or operate `mcp.veyanet.tech`.
 
 Source of truth: `src/config.ts` (`loadConfig()`, `writesEnabled()`). Template: `.env.example`.
 
@@ -40,7 +40,7 @@ Node **20+** (`package.json` `engines`).
 ## 2. Resolution order
 
 1. `process.env` (including values loaded by your process manager; this package’s CLI does **not** auto-load `.env` — put env in the systemd/docker unit or export them).
-2. Hard-coded **Robinhood testnet** defaults in `loadConfig()`.
+2. Hard-coded **Mainnet** defaults in `loadConfig()`. `ROBINHOOD_NETWORK=testnet` selects Testnet.
 
 There is no remote config service. There is no fetch of an IDL.
 
@@ -57,20 +57,21 @@ Type `McpServiceConfig`:
 | `port` | `PORT` |
 | `host` | `HOST` |
 | `publicMcpUrl` | `PUBLIC_MCP_URL` (trailing slash stripped) |
-| `chainId` | `ROBINHOOD_CHAIN_ID` |
-| `rpcUrl` | `ROBINHOOD_RPC_URL` |
-| `explorerUrl` | `ROBINHOOD_EXPLORER_URL` |
-| `contractAddress` | `VEYA_CONTRACT_ADDRESS` |
+| `network` | `ROBINHOOD_NETWORK`. Unset is Mainnet. `testnet` is Testnet |
+| `chainId` | The selected profile. See [NETWORK_PIN.md](./NETWORK_PIN.md) |
+| `rpcUrl` | Mainnet or Testnet RPC for that profile |
+| `explorerUrl` | Mainnet or Testnet explorer for that profile |
+| `contractAddress` | Mainnet protocol contract, or the Testnet contract when Testnet is selected |
 | `apiUrl` | `VEYA_API_URL` (trailing slash stripped) |
-| `mcpApiKey` | `MCP_API_KEY` or `null` (operator relayer path only) |
-| `relayerPrivateKey` | `VEYA_RELAYER_PRIVATE_KEY` or `VEYA_DEPLOYER_PRIVATE_KEY` or `null` (not used for user-paid writes) |
-| `payerPrivateKey` | `VEYA_PAYER_PRIVATE_KEY` or `null` (your wallet for user-paid writes) |
+| `mcpApiKey` | `MCP_API_KEY` or `null`. When set, `/mcp` requires this Bearer token |
+| `relayerPrivateKey` | `VEYA_RELAYER_PRIVATE_KEY` or `VEYA_DEPLOYER_PRIVATE_KEY` or `null` (not used for own-wallet writes) |
+| `payerPrivateKey` | `VEYA_PAYER_PRIVATE_KEY` or `null` (your wallet for own-wallet writes) |
 | `validatorNodes` | CSV `VEYA_VALIDATOR_NODES` |
 | `sealedNodeUrl` | `VEYA_SEALED_NODE_URL` |
 | `corsOrigins` | CSV `CORS_ORIGIN` |
 | `nodeEnv` | `NODE_ENV` |
 
-`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.3` (code constant, not read from env).
+`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.8` (code constant, not read from env).
 
 ---
 
@@ -80,7 +81,7 @@ Type `McpServiceConfig`:
 
 | Variable | Type | Default | Notes |
 |----------|------|---------|-------|
-| `PORT` | number | `8788` | Reverse proxy forwards here |
+| `PORT` | number | `<mcp-port>` | Reverse proxy forwards here |
 | `HOST` | string | `0.0.0.0` | Bind address |
 | `PUBLIC_MCP_URL` | URL | `https://mcp.veyanet.tech/mcp` | Landing/health advertisement. Keep this the **public** paste URL in production. |
 | `NODE_ENV` | string | `development` | Use `production` on the public host |
@@ -91,12 +92,16 @@ Must match `@veyanet/sdk` defaults unless you are deliberately running a private
 
 | Variable | Type | Default |
 |----------|------|---------|
-| `ROBINHOOD_CHAIN_ID` | number | `46630` |
-| `ROBINHOOD_RPC_URL` | URL | `https://rpc.testnet.chain.robinhood.com` |
-| `ROBINHOOD_EXPLORER_URL` | URL | `https://explorer.testnet.chain.robinhood.com` |
-| `VEYA_CONTRACT_ADDRESS` | address | `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| `ROBINHOOD_NETWORK` | `mainnet` or `testnet` | Mainnet |
+| `ROBINHOOD_MAINNET_CHAIN_ID` | number | Mainnet profile |
+| `ROBINHOOD_MAINNET_RPC_URL` | URL | `https://rpc.mainnet.chain.robinhood.com` |
+| `ROBINHOOD_MAINNET_EXPLORER_URL` | URL | `https://robinhoodchain.blockscout.com` |
+| `VEYA_MAINNET_CONTRACT_ADDRESS` | address | Mainnet protocol contract. An explicit empty string stays unpublished |
+| `VEYA_MAINNET_RELAYER_PRIVATE_KEY` | `0x` hex | Mainnet relayer key for `veya_seal_decision` when the relayer switch is on |
+| `VEYA_SEAL_DECISION_ENVIRONMENT_ID` | uuid | Required for `veya_seal_decision` on Mainnet. Testnet uses the SDK environment when this is unset |
+| `VEYA_CONTRACT_ADDRESS` | address | Testnet contract, used only when the profile is Testnet |
 
-If you change chain id, change RPC, explorer, and contract **together**. SDK writes call `ensureRobinhoodChain()` and refuse a mismatched `eth_chainId`.
+RPC, explorer, and contract move together with the profile. SDK writes refuse a mismatched RPC. The numeric pins are in [NETWORK_PIN.md](./NETWORK_PIN.md).
 
 ### Product API
 
@@ -110,12 +115,12 @@ Used by `veya_api_health`, all `veya_public_*` and product session tools, and (i
 
 | Variable | Type | Default in code |
 |----------|------|-----------------|
-| `VEYA_VALIDATOR_NODES` | comma-separated URLs | `http://127.0.0.1:7701,http://127.0.0.1:7702,http://127.0.0.1:7703` |
-| `VEYA_SEALED_NODE_URL` | URL | `http://127.0.0.1:7800` |
+| `VEYA_VALIDATOR_NODES` | comma-separated URLs | `<validator-1-url>,<validator-2-url>,<validator-3-url>` |
+| `VEYA_SEALED_NODE_URL` | URL | `<sealed-node-url>` |
 
 See [section 6](#6-fleet-defaults-read-this-twice).
 
-### User-paid writes
+### Own-wallet writes
 
 | Variable | Type | Default |
 |----------|------|---------|
@@ -127,9 +132,8 @@ On-chain writes always use **this** key (or the tool argument). `msg.sender` is 
 
 | Variable | Type | Default |
 |----------|------|---------|
-| `MCP_API_KEY` | string | empty → operator relayer writes off |
+| `MCP_API_KEY` | string | When set, `/mcp` requires `Authorization: Bearer`. Empty leaves the public paste URL open |
 | `VEYA_RELAYER_PRIVATE_KEY` | `0x` hex | empty |
-| `VEYA_DEPLOYER_PRIVATE_KEY` | `0x` hex | unused leftover (same as relayer) |
 
 ### CORS
 
@@ -148,7 +152,7 @@ writesEnabled() === true
 operatorRelayerWritesEnabled() === false
 ```
 
-User-paid write tools are **always registered**. They need a product `apiKey` and `VEYA_PAYER_PRIVATE_KEY` (or the tool argument). The host relayer is not used. See [AUTHENTICATION.md](./AUTHENTICATION.md).
+Own-wallet write tools are **always registered**. They need a product `apiKey` and `VEYA_PAYER_PRIVATE_KEY` (or the tool argument). The host relayer is not used. See [AUTHENTICATION.md](./AUTHENTICATION.md).
 
 ---
 
@@ -156,20 +160,20 @@ User-paid write tools are **always registered**. They need a product `apiKey` an
 
 The **code default** is loopback. That is for an MCP process that sits **on the same machine as validators** (typical when you run MCP next to the product API).
 
-The **stranger path** is never those ports. Strangers only POST to `https://mcp.veyanet.tech/mcp`. The MCP host, if it is **not** on the API box, must set `VEYA_VALIDATOR_NODES` and `VEYA_SEALED_NODE_URL` to wherever the backend actually listens (private network). If those URLs are wrong or down:
+The **public path** is never those ports. Public users only POST to `https://mcp.veyanet.tech/mcp`. The MCP host, if it is **not** on the API box, must set `VEYA_VALIDATOR_NODES` and `VEYA_SEALED_NODE_URL` to wherever the backend actually listens (private network). If those URLs are wrong or down:
 
 - `veya_run_consensus` / `veya_sealed_execute` fail closed
-- MCP does not invent a quorum hash
+- Consensus results come only from validator responses
 
 User-facing copy uses `https://mcp.veyanet.tech/mcp`. `.env.example` leaves fleet vars commented on purpose.
 
-Production `/health` on **api.veyanet.tech** can be `degraded` when the fleet is not running there. That is honest API status, not an MCP config bug.
+Production /health on api.veyanet.tech shows fleet status.
 
 ---
 
 ## 7. Comment-only line in `.env.example`
 
-`.env.example` includes `ROBINHOOD_NETWORK=testnet`. `loadConfig()` uses chain id `46630`. That extra line is a human comment; the pin that matters is the chain id.
+`ROBINHOOD_NETWORK=testnet` selects Testnet. Leave it unset for Mainnet. That variable is the profile switch. It is not a comment.
 
 ---
 
@@ -185,10 +189,10 @@ See [TRANSPORT.md](./TRANSPORT.md). `credentials: true` with an allowlist. MCP n
 |---------|---------|
 | Wrong chain id / RPC | Writes `CHAIN_MISMATCH`; reads look like another network |
 | `PUBLIC_MCP_URL` = private host in prod | Landing tells people the wrong paste URL (landing HTML currently **forces** the canonical public URL; health still uses `cfg.publicMcpUrl`) |
-| Relayer set, no `MCP_API_KEY` | Operator relayer writes stay off (user-paid writes still work) |
-| `MCP_API_KEY` set, no relayer | Operator relayer writes stay off |
+| Relayer key set, `VEYA_SEAL_DECISION_RELAYER` unset | Seal-decision relayer stays off (own-wallet writes still work) |
+| `MCP_API_KEY` set | `/mcp` requires that Bearer token. Relayer writes stay off unless `VEYA_SEAL_DECISION_RELAYER=1` |
 | Empty `VEYA_PAYER_PRIVATE_KEY` and no tool arg | `payerPrivateKey required` |
-| Unfunded payer | `You don't have testnet tokens. Please get them for the transaction.` |
+| Unfunded payer | Mainnet: `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` Testnet: `You don't have testnet tokens. Please get them for the transaction.` |
 | Documenting loopback as the product path | Users cannot reach your private network |
 | Pointing fleet at empty loopback on a host without validators | Consensus/sealed fail — expected |
 | Using guest JWT as `apiKey` on a write | MCP refuses; mint a product key |
@@ -207,6 +211,6 @@ npm run build
 node dist/cli.js
 ```
 
-Then a **local** client can POST `http://127.0.0.1:8788/mcp`. That URL is for you, not for the world.
+Then a **local** client can POST `<your-mcp-host>/mcp`. That URL is for you, not for the world.
 
 Related: [DEPLOYMENT.md](./DEPLOYMENT.md) for TLS.
