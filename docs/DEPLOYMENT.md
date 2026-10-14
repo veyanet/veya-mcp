@@ -4,9 +4,9 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.2.3`
+**npm:** `@veyanet/mcp@1.2.8`
 
-Strangers only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
+Public users only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 
 **[Configuration](./CONFIGURATION.md)** • **[Authentication](./AUTHENTICATION.md)** • **[Transport](./TRANSPORT.md)** • **[Architecture](./ARCHITECTURE.md)**
 
@@ -46,9 +46,9 @@ This package is the MCP HTTP process.
 | Component | Where it lives |
 |-----------|----------------|
 | Product REST + database | API host (`api.veyanet.tech`) |
-| validator-node ×3 | API host / private fleet (defaults `7701–7703` if colocated) |
-| sealed-node | API host / private fleet (default `7800`) |
-| Chain | Robinhood public testnet |
+| validator-node ×3 | API host / private fleet (on the ports you configure, if colocated) |
+| sealed-node | API host / private fleet (default `<sealed-port>`) |
+| Chain | Robinhood Chain Mainnet |
 
 If you only deploy MCP and the API fleet is down, describe/ping/verify can still work; consensus/sealed/guest Build paths follow the API and fleet.
 
@@ -61,21 +61,21 @@ Internet
    │ TLS (Let’s Encrypt / your cert)
    ▼
 Reverse proxy (nginx, Caddy, Traefik)
-   │ HTTP to 127.0.0.1:8788
+   │ HTTP to <your-mcp-host>
    │ Forward Authorization
    ▼
 Node @veyanet/mcp
    │
    ├── Robinhood RPC (public)
    ├── api.veyanet.tech (HTTPS)
-   └── optional: 127.0.0.1:7701–7703 / 7800 if fleet is local
+   └── optional: <validator-1..3-url> / <sealed-port> if fleet is local
 ```
 
 ```mermaid
 flowchart LR
   Net["Internet"] --> TLS["TLS terminator"]
-  TLS --> Node["veya-mcp :8788"]
-  Node --> RPC["rpc.testnet.chain.robinhood.com"]
+  TLS --> Node["veya-mcp :<mcp-port>"]
+  Node --> RPC["rpc.mainnet.chain.robinhood.com"]
   Node --> API["api.veyanet.tech"]
   Node --> Fleet["optional local fleet"]
 ```
@@ -116,22 +116,27 @@ Copy `.env.example` → `.env` on the **server only**. The CLI does not auto-loa
 
 ## 5. Required production env
 
-Minimum for a **public** host (reads free; user-paid writes use the caller's key + wallet):
+Minimum for a **public** host (reads need no key; own-wallet writes use the caller's key + wallet):
 
 ```bash
 NODE_ENV=production
-HOST=127.0.0.1
-PORT=8788
+HOST=<your-host>
+PORT=<mcp-port>
 PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp
 VEYA_API_URL=https://api.veyanet.tech
-ROBINHOOD_CHAIN_ID=46630
-ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com
-ROBINHOOD_EXPLORER_URL=https://explorer.testnet.chain.robinhood.com
-VEYA_CONTRACT_ADDRESS=0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84
-# Leave MCP_API_KEY and VEYA_RELAYER_PRIVATE_KEY empty
+# Mainnet is the default. Leave ROBINHOOD_NETWORK unset.
+# ROBINHOOD_MAINNET_RPC_URL=https://rpc.mainnet.chain.robinhood.com
+# ROBINHOOD_MAINNET_EXPLORER_URL=https://robinhoodchain.blockscout.com
+# VEYA_MAINNET_CONTRACT_ADDRESS=0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674
+# Testnet is the option:
+# ROBINHOOD_NETWORK=testnet
+# ROBINHOOD_MAINNET_RPC_URL=https://rpc.mainnet.chain.robinhood.com
+# ROBINHOOD_EXPLORER_URL=https://explorer.testnet.chain.robinhood.com
+
+# Leave MCP_API_KEY and the relayer key empty on a public host
 ```
 
-`HOST=127.0.0.1` is safer than `0.0.0.0` if the proxy sits on the same machine. Code default is `0.0.0.0` so Docker-style binds work; prefer loopback + proxy when you can.
+`HOST=<your-host>` is safer than `0.0.0.0` if the proxy sits on the same machine. Code default is `0.0.0.0` so Docker-style binds work; prefer loopback + proxy when you can.
 
 If this MCP process **is** on the API box and validators listen locally, you can leave fleet defaults. If not, set `VEYA_VALIDATOR_NODES` and `VEYA_SEALED_NODE_URL` to the private fleet URLs. See [CONFIGURATION.md](./CONFIGURATION.md).
 
@@ -155,7 +160,7 @@ Requirements:
 
 Sketch (nginx concepts, not a copy-paste production file):
 
-- `proxy_pass` to `http://127.0.0.1:8788`
+- `proxy_pass` to `<your-mcp-host>`
 - `proxy_http_version 1.1`
 - `proxy_set_header Authorization $http_authorization`
 - `proxy_buffering off` on `/mcp`
@@ -189,9 +194,9 @@ curl -sS https://api.veyanet.tech/health
 Require MCP health:
 
 - `service` = `@veyanet/mcp`
-- `chainId` = `46630`
+- `chainId` matches the selected profile: Mainnet by default, Testnet only when `ROBINHOOD_NETWORK=testnet`
 - `sealed` mentions `AES-256-GCM`
-- `writesEnabled` = `true` (user-paid write tools; `operatorRelayerWrites` is `false`)
+- `writesEnabled` = `true` (own-wallet write tools; `operatorRelayerWrites` is `false`)
 - `publicMcpUrl` = `https://mcp.veyanet.tech/mcp`
 
 Landing must tell humans to paste `https://mcp.veyanet.tech/mcp`.
@@ -206,10 +211,10 @@ Then connect a real MCP client and call `veya_describe` + `veya_ping_chain`. See
 
 | Host | Writes |
 |------|--------|
-| `mcp.veyanet.tech` | User-paid writes (product `apiKey` + **user** wallet). Hosted relayer off. |
+| `mcp.veyanet.tech` | Own-wallet writes (product `apiKey` + **user** wallet). Hosted relayer off. |
 | Self-hosted MCP | Same, with `VEYA_PAYER_PRIVATE_KEY` in env so the key is not a tool argument |
 
-Do not put a hosted relayer key on the public URL. Guest listing still works. On-chain stamps from MCP spend the user's testnet ETH.
+Do not put a hosted relayer key on the public URL. Guest listing still works. On-chain writes from MCP spend the user's ETH.
 
 ---
 
@@ -217,11 +222,11 @@ Do not put a hosted relayer key on the public URL. Guest listing still works. On
 
 If you colocated MCP with validators:
 
-- Validators: `POST /execute` on `7701–7703`
-- Sealed: `POST /protected` on `7800`
-- Do not open those ports on the public firewall. Only Node on localhost should call them.
+- Validators: `POST /execute` on the ports you configure
+- Sealed: `POST /protected` on `<sealed-port>`
+- Do not open those ports on the public firewall. Only Node on your host should call them.
 
-Strangers never curl those ports.
+Public users never curl those ports.
 
 ---
 
@@ -241,6 +246,6 @@ Never git:
 
 Keep the previous `dist/` or npm version. This package has no database. Rollback = restart old binary + same env.
 
-Chain state is on Robinhood testnet and is **not** rolled back with MCP.
+Chain state stays on Robinhood Chain; MCP rollback does not change it.
 
 Related: [NETWORK_PIN.md](./NETWORK_PIN.md), [QUICKSTART.md](./QUICKSTART.md).
