@@ -2,7 +2,7 @@
 
 This MCP server **imports** `@veyanet/sdk` for hashing, PQ crypto, receipt parsing, and `Veya.sol` writes. Product rooms go through `fetch` to the product API.
 
-Strangers install packages from npm only:
+Public users install packages from npm only:
 
 ```bash
 npm install @veyanet/sdk
@@ -33,11 +33,11 @@ npm install @veyanet/sdk
 | Package | Job |
 |---------|-----|
 | `@veyanet/sdk` | Crypto, chain-id guard, consensus client, sealed client, `EvmAnchor` |
-| `@veyanet/mcp` | Streamable HTTP, tool names, product `apiKey` forwarding, honesty card, user-paid `EvmAnchor` writes |
+| `@veyanet/mcp` | Streamable HTTP, tool names, product `apiKey` forwarding, service info, own-wallet `EvmAnchor` writes |
 
 Agents should not paste a mainnet key into a public MCP tool argument. Prefer a self-hosted MCP with `VEYA_PAYER_PRIVATE_KEY`. App servers that want full control import the SDK and never run MCP.
 
-The hosted product API also imports the SDK. Same pins: chain **46630**, `Veya.sol` `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`.
+The hosted product API also imports the SDK. This tree's default is Mainnet, contract `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674`. Testnet is Robinhood Chain Testnet and `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` when `ROBINHOOD_NETWORK=testnet`.
 
 ---
 
@@ -46,10 +46,10 @@ The hosted product API also imports the SDK. Same pins: chain **46630**, `Veya.s
 From this package’s `package.json`:
 
 ```json
-"@veyanet/sdk": "^1.2.4"
+"@veyanet/sdk": "^1.2.8"
 ```
 
-MCP version is **1.2.3**. SDK version is **^1.2.4** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
+MCP version is **1.2.8**. SDK version is **^1.2.8** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
 
 ---
 
@@ -89,9 +89,9 @@ Same fields plus the **user's** `payerPrivateKey`. Used only by write tools afte
 | `routeMessage` | `veya_route_message` |
 | `routeSecureMessage` | `veya_route_secure_message` |
 | `verifySecureMessage` | `veya_verify_secure_message` |
-| `storeMemory` / `readMemory` / `invalidateMemory` | local `~/.veya` tools |
+| Product API `scoped-memory` | `veya_store_memory` / `veya_read_memory` / `veya_invalidate_memory` on the account behind `apiKey` |
 
-In-process Boundnet and `~/.veya` memory live in the **MCP Node process**, not in the product database.
+Memory is saved on the product API under the API key. It does not live in a shared file on the MCP machine.
 
 ---
 
@@ -105,7 +105,7 @@ flowchart TB
   SDK --> RPC["Robinhood JSON-RPC"]
   SDK --> VAL["POST /execute"]
   SDK --> SEAL["POST /protected"]
-  SDK --> DISK["~/.veya"]
+  API --> MEM["scoped memory by API key"]
   API --> PG["Product DB / relayer"]
 ```
 
@@ -154,7 +154,7 @@ That path never constructs `VeyaClient`. The API server, elsewhere, uses the SDK
 
 If MCP health says one contract address and `npm view @veyanet/sdk` docs say another, treat it as a **bug**. Pins must match [NETWORK_PIN.md](./NETWORK_PIN.md).
 
-SDK chain-id guard still applies on writes even if MCP env is wrong: a lying RPC that is not 46630 should refuse send.
+SDK chain-id guard still applies on writes even if MCP env is wrong: a lying RPC that is not the selected profile (Mainnet, or Testnet) should refuse send.
 
 ---
 
@@ -162,6 +162,6 @@ SDK chain-id guard still applies on writes even if MCP env is wrong: a lying RPC
 
 Use `@veyanet/sdk` in your own Node process when you want crypto and chain calls in-process.
 
-Use MCP when an agent runtime should call VEYA over the paste URL, with the public honesty card.
+Use MCP when an agent runtime should call VEYA over the paste URL, with the public service info.
 
 Related SDK docs live in the SDK repo: architecture, post-quantum, sealed execution. This file only explains the **bridge**.
