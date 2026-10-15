@@ -1,6 +1,6 @@
 # Verification Guide — `@veyanet/mcp`
 
-How a stranger or auditor proves this MCP talks to **real** Robinhood testnet settlement.
+How a public user or auditor proves this MCP talks to the selected Robinhood Chain profile. This tree defaults to **Mainnet**. **Testnet** is optional: `ROBINHOOD_NETWORK=testnet`.
 
 You need a browser, `curl`, an MCP client (or this repo’s smoke script if you are an operator), and optionally `@veyanet/sdk` from npm.
 
@@ -12,7 +12,7 @@ You need a browser, `curl`, an MCP client (or this repo’s smoke script if you 
 
 1. [What you are proving](#1-what-you-are-proving)
 2. [Procedure A — public reads (no keys)](#2-procedure-a--public-reads-no-keys)
-3. [Procedure B — product API honesty](#3-procedure-b--product-api-honesty)
+3. [Procedure B — product API service info](#3-procedure-b--product-api-service-info)
 4. [Procedure C — independent SDK check](#4-procedure-c--independent-sdk-check)
 5. [Procedure D — operator writes (keys)](#5-procedure-d--operator-writes-keys)
 6. [Repo scripts](#6-repo-scripts)
@@ -25,11 +25,11 @@ You need a browser, `curl`, an MCP client (or this repo’s smoke script if you 
 
 Three facts:
 
-1. The MCP host is up and **honest** (`/health`, `veya_describe`): testnet **46630**, sealed = **AES-256-GCM**.
-2. Robinhood RPC chain id is **46630** (`veya_ping_chain`).
+1. The MCP host is up (`/health`, `veya_describe`): the selected profile, sealed = **AES-256-GCM**. This tree's default is Mainnet.
+2. Robinhood RPC chain id matches that profile (`veya_ping_chain`).
 3. A known (or newly written) `Veya.sol` transaction parses, and optionally the `commitments(digest)` mapping still returns true.
 
-A pass means those facts match the live host. Product API `/health` may be `ok` or **`degraded`**. Degraded usually means fleet down; that is still an honest report. Guest sessions are Use-only. Quorum is matching hashes: if validators are unreachable, `consensus_reached` is false.
+A pass means those facts match the live host. Product API /health shows ok or degraded (fleet status). Guest sessions are Use-only. Quorum is matching hashes: if validators are unreachable, `consensus_reached` is false.
 
 ---
 
@@ -46,11 +46,11 @@ Require:
 | Field | Expected |
 |-------|----------|
 | `service` | `@veyanet/mcp` |
-| `chainId` | `46630` |
+| `chainId` | Matches the selected profile (Mainnet by default) |
 | `sealed` | contains `AES-256-GCM` |
-| `settlement` | Robinhood testnet 46630 |
+| `settlement` | Robinhood Chain plus the selected profile |
 | `publicMcpUrl` | `https://mcp.veyanet.tech/mcp` |
-| `writesEnabled` | `true` on 1.2.0 (user-paid tools). Check `operatorRelayerWrites` is `false` on the public host |
+| `writesEnabled` | `true` (own-wallet tools). Check `operatorRelayerWrites` is `false` on the public host |
 | `contractAddress` | `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
 
 ### A2. Describe
@@ -63,7 +63,7 @@ Cross-check name `@veyanet/mcp`, version, contract, RPC, explorer, `sealed` text
 
 Call `veya_ping_chain`.
 
-Require `chainId` / `expectedChainId` **46630**. A recent block number means RPC is alive. If chain id differs, **stop** — the host is mis-pinned.
+Require `chainId` / `expectedChainId` to match the selected profile (Mainnet by default). A recent block number means RPC is alive. If chain id differs from that profile, **stop** — the host is mis-pinned.
 
 ### A4. Verify a known transaction
 
@@ -79,7 +79,7 @@ Open:
 https://explorer.testnet.chain.robinhood.com/tx/0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8
 ```
 
-Confirm the explorer `to` address is `Veya.sol` and the tool’s parsed digest/events match the receipt. This tx is a sealed-execution **commitment** path used in docs — it does not prove FHE.
+Confirm the explorer `to` address is `Veya.sol` and the tool’s parsed digest/events match the receipt. This tx is a sealed-execution **commitment** path used in docs.
 
 ### A5. Stronger on-chain mapping check
 
@@ -87,7 +87,7 @@ Call `veya_verify_commitment_onchain` with the same hash (or `veya_commitment_ex
 
 ---
 
-## 3. Procedure B — product API honesty
+## 3. Procedure B — product API service info
 
 Call `veya_api_health` (or `curl -s https://api.veyanet.tech/health`).
 
@@ -107,16 +107,16 @@ MCP and SDK must agree on pins. From any machine:
 npm install @veyanet/sdk
 ```
 
-Use `VeyaClient` defaults (chain 46630, same contract). Call `pingChain()` and `verifyTransaction(txHash)` (or this repo’s sibling SDK examples if you cloned [veyanet/veya-sdk](https://github.com/veyanet/veya-sdk)).
+Use `VeyaClient` on the same profile as the MCP host. The SDK default is Mainnet. Pass `network: "testnet"` when the host is Testnet. Call `pingChain()` and `verifyTransaction(txHash)` (or this repo’s sibling SDK examples if you cloned [veyanet/veya-sdk](https://github.com/veyanet/veya-sdk)).
 
-If SDK says 46630 and MCP health says otherwise, MCP env is wrong.
+If the SDK chain id and MCP health disagree, MCP env is wrong.
 
 ---
 
-## 5. Procedure D — user-paid writes
+## 5. Procedure D — own-wallet writes
 
 1. Confirm write tools exist (`tools/list` includes `veya_store_commitment`).
-2. Call `veya_writes_status` — user-paid writes, not hosted relayer.
+2. Call `veya_writes_status` — own-wallet writes, not hosted relayer.
 3. Call a write **without** `apiKey` — `{ "error": "apiKey required" }`.
 4. Call a write with a random unfunded `payerPrivateKey` after a valid `apiKey` (or expect API-key reject first). Empty wallet must return: `You don't have testnet tokens. Please get them for the transaction.`
 5. With a real product key **and** that same funded wallet, call `veya_store_commitment` or `veya_anchor_proof`. Result `from` must be the user address.
@@ -132,13 +132,13 @@ Public paste URL still allows reads with no key. Prefer self-host for `VEYA_PAYE
 
 | Command | What it checks |
 |---------|----------------|
-| `npm run smoke` | In-process `initialize`, `tools/list` (≥ 30 tools), `veya_describe`, `veya_ping_chain` |
+| `npm run smoke` | In-process `initialize`, `tools/list` (51 tools), `veya_describe`, `veya_ping_chain` |
 | `npm test` | Unit tests (config, etc.) |
 | `npm run lint` | `tsc --noEmit` |
-| `tsx scripts/verify-full.ts` | Local MCP workflow: reads free, apiKey required, unfunded payer message |
+| `tsx scripts/verify-full.ts` | Local MCP workflow: reads need no key, apiKey required for product tools, unfunded payer message |
 | `tsx scripts/verify-live.ts` | Live public endpoints (operator) |
 
-Strangers can stop at Procedure A + explorer.
+Public users can stop at Procedure A + explorer.
 
 ---
 
@@ -162,13 +162,12 @@ Keep these artifacts for diligence:
 
 | Check | Pass |
 |-------|------|
-| Health chain id | `46630` |
 | Describe sealed | AES-256-GCM |
-| Ping chain id | `46630` |
+| Ping chain id | Same profile as health |
 | Known tx verify | Parses `Veya.sol` events; explorer agrees |
-| Health `writesEnabled` | `true` (user-paid tools registered); `operatorRelayerWrites` is `false` on the public host |
+| Health `writesEnabled` | `true` (own-wallet tools registered); `operatorRelayerWrites` is `false` on the public host |
 | Guest Build from MCP | refused / mint product API key |
-| Unfunded payer | exact testnet-tokens sentence |
+| Unfunded payer | Mainnet empty-wallet sentence, or the exact testnet-tokens sentence on Testnet |
 | Consensus with fleet down | `consensus_reached: false` or tool error |
 
-Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for product keys and user-paid gas.
+Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for product keys and own-wallet gas.
