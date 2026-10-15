@@ -10,6 +10,8 @@ https://mcp.veyanet.tech/mcp
 
 Cryptography and chain reads go through `@veyanet/sdk`. Product rooms and registry go through `https://api.veyanet.tech`. Consensus and sealed capacity belong to that API’s fleet. On-chain writes spend **your** wallet (product `apiKey` + `payerPrivateKey`).
 
+Chain tools use the server profile. The default is **Mainnet**. `ROBINHOOD_NETWORK=testnet` selects **Testnet** for the process.
+
 **[Architecture](./ARCHITECTURE.md)** • **[Quickstart](./QUICKSTART.md)** • **[Authentication](./AUTHENTICATION.md)** • **[SDK bridge](./SDK_BRIDGE.md)**
 
 ---
@@ -19,7 +21,7 @@ Cryptography and chain reads go through `@veyanet/sdk`. Product rooms and regist
 1. [How to read this file](#how-to-read-this-file)
 2. [Map: which drawer to open](#map-which-drawer-to-open)
 3. [How replies look](#how-replies-look)
-4. [1. Honesty and public chain reads](#1-honesty-and-public-chain-reads)
+4. [1. Service info and public chain reads](#1-service-info-and-public-chain-reads)
 5. [2. Post-quantum crypto](#2-post-quantum-crypto-in-this-process)
 6. [3. Fleet, sealed, Boundnet, local memory](#3-fleet-sealed-boundnet-local-memory)
 7. [4. Public registry and on-chain reads](#4-public-registry-and-on-chain-reads)
@@ -45,16 +47,15 @@ Auth is one of:
 |-------|---------|
 | **None** | Anyone connected to the MCP URL |
 | **Key** | Pass `apiKey` (`veya_dev_…` / `veya_live_…`) from the product site |
-| **Key + payer** | Product `apiKey` plus your wallet (`payerPrivateKey` or `VEYA_PAYER_PRIVATE_KEY`) |
-| **Payer only** | `veya_prove` with `anchor: true`. `environmentId` and `payerPrivateKey`. No product `apiKey` |
+| **Key + payer** | Product `apiKey` plus your wallet. Anchored `veya_prove` also needs `environmentId` |
 
-Guest sessions are **Use listing only**. Create environment and product on-chain writes need a product API key. Those writes also need **your** funded testnet wallet. Guest JWT is not a write credential. `veya_prove` without `anchor` needs no key.
+Guest sessions are **Use listing only**. Create environment and product on-chain writes need a product API key. Those writes also need **your** funded wallet on the selected profile. Testnet is optional (`ROBINHOOD_NETWORK=testnet`). Guest JWT is not a write credential. `veya_prove` without `anchor` needs no key. `veya_prove` with `anchor` needs `apiKey`.
 
-If validators or sealed-node are down, consensus/sealed tools **fail closed**. MCP never invents a matching hash.
+If validators or sealed-node are down, consensus/sealed tools return a clear error or `consensus_reached: false`.
 
-`veya_writes_status` is always registered. It explains user-paid writes. Empty wallet → `You don't have testnet tokens. Please get them for the transaction.`
+`veya_writes_status` is always registered. It explains own-wallet writes. On Mainnet an empty wallet says `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` On Testnet it says `You don't have testnet tokens. Please get them for the transaction.`
 
-Approximate count: **~48 tools** (writes always listed).
+**51 tools** (writes always listed).
 
 ---
 
@@ -63,13 +64,13 @@ Approximate count: **~48 tools** (writes always listed).
 ```mermaid
 flowchart TB
   Agent["Agent / Cursor / Claude"] --> MCP["POST /mcp"]
-  MCP --> Honesty["Honesty and chain reads"]
+  MCP --> Info["Service info and chain reads"]
   MCP --> Crypto["PQ crypto in process"]
   MCP --> Fleet["Consensus sealed Boundnet memory"]
   MCP --> Registry["Public registry and on-chain reads"]
   MCP --> Product["Product API apiKey"]
   MCP --> Writes["On-chain writes from your wallet"]
-  Honesty --> RPC["Robinhood RPC 46630"]
+  Info --> RPC["Robinhood RPC"]
   Registry --> RPC
   Writes --> RPC
   Product --> API["api.veyanet.tech"]
@@ -83,8 +84,9 @@ flowchart TB
 | See if the chain is alive | `veya_ping_chain` |
 | Check a known tx | `veya_verify_transaction` |
 | Prove text, JSON, or a receipt | `veya_prove` |
+| Seal an evidence id and a decision | `veya_seal_decision` |
 | Hash text the VEYA way | `veya_hash_blake3` |
-| See if the product API / fleet is honest | `veya_api_health` |
+| Check product API and fleet status | `veya_api_health` |
 | Make PQ keys (no chain) | `veya_pq_keygen` |
 | Run 2-of-3 (if fleet up) | `veya_run_consensus` |
 | Seal a payload (if sealed up) | `veya_sealed_execute` |
@@ -110,7 +112,7 @@ Product and public-registry tools wrap the HTTP call as:
 { "httpStatus": 200, "body": { } }
 ```
 
-A guest Build call is an MCP error (`isError: true`) plus the product API `httpStatus` when the call reached the API. Mint a product API key after wallet login.
+A guest Build call is an MCP error (`isError: true`) plus the product API `httpStatus` when the call reached the API. Create a product API key at app.veyanet.tech after wallet login.
 
 `veya_api_health` uses `{ "httpStatus", "body" }` from `GET {VEYA_API_URL}/health` (8 second timeout). Other API tools use a 20 second timeout (`src/api.ts`).
 
@@ -118,13 +120,13 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 ---
 
-# 1. Honesty and public chain reads
+# 1. Service info and public chain reads
 
-**Auth: none.** These are the tools a stranger should try first.
+**Auth: none.** These are the tools a public user should try first.
 
 ## `veya_describe`
 
-**What it does.** Returns a JSON honesty card from config: package name and version, public paste URL, Robinhood testnet pin (chain id, contract, RPC, explorer), product API URL, sealed = AES-256-GCM, how writes work, and that fleet is API-owned. Use `veya_ping_chain` for a live RPC check.
+**What it does.** Returns a JSON service info from config: package name and version, public paste URL, the selected network: Mainnet (default) or Testnet, with chain id, contract, RPC and explorer, product API URL, sealed = AES-256-GCM, how writes work, and that fleet is API-owned. Use `veya_ping_chain` for a live RPC check.
 
 **When to use it.** First call after connecting. Diligence. “What is this MCP?”
 
@@ -142,7 +144,7 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 **Arguments.** None.
 
-**What you get back.** Ping fields plus `chainId` as a string, `expectedChainId` from config (should be `46630` on the public product), and `config` from `client.describe()`. On the public pin, that chain id is **46630**.
+**What you get back.** Ping fields plus `chainId` as a string, `expectedChainId` from config, and `config` from `client.describe()`. This tree's default is Mainnet. Testnet is the profile when `ROBINHOOD_NETWORK=testnet`.
 
 ---
 
@@ -152,7 +154,7 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 Without `anchor`, the result is `mode` `digest`, `ok` true, and `anchored` false. No transaction is sent.
 
-With `anchor` true, the call also needs `environmentId` for an environment that already exists on `Veya.sol`, and `payerPrivateKey`. That writes one `storeCommitment`, then reads the new transaction back. `mode` is `anchored`. A missing payer key or a missing environment id is a refusal and sends nothing.
+With `anchor` true, the call also needs `apiKey`, `environmentId` for an environment that already exists on `Veya.sol`, and `payerPrivateKey`. That writes one `storeCommitment`, then reads the new transaction back. `mode` is `anchored`. A missing API key, a missing payer key, or a missing environment id is a refusal and sends nothing.
 
 **When to use it.** You have text, a JSON value, or a receipt hash and want one proof object.
 
@@ -164,10 +166,32 @@ With `anchor` true, the call also needs `environmentId` for an environment that 
 | `json` | string, a JSON value | exactly one of text, json, txHash |
 | `txHash` | string, `0x` + 64 hex | exactly one of text, json, txHash |
 | `anchor` | boolean | no |
+| `apiKey` | string | yes when `anchor` is true |
 | `environmentId` | string | yes when `anchor` is true |
 | `payerPrivateKey` | string | yes when `anchor` is true |
 
 **What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `chainId`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. A receipt with no VEYA log and a receipt that called a different contract both return that full object. The second one sets `refusal` to `transaction did not target Veya.sol — not a VEYA proof`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
+
+---
+
+## `veya_seal_decision`
+
+**What it does.** One sealed decision. Pass `evidenceId` and `decision`. On Mainnet also pass `environmentId`, or set `VEYA_SEAL_DECISION_ENVIRONMENT_ID` on the host. Without either, the result is `SEAL_ENVIRONMENT_REQUIRED` and nothing is sent. Testnet uses environment `7d0af0ba-2ae3-4d0e-bc75-0bbaccb3dd71` when no id is passed. `decision` is a string that `JSON.parse` reads as an object. If the sealed node does not answer, the result is `code` `SEALED_UNREACHABLE`, `transaction` null, and `continuedOnOpenWorker` false. No transaction is sent.
+
+If the sealed node answers, the result carries the sealed fingerprint, `runtime` `AES-256-GCM`, and a 2-of-3 ML-DSA quorum. `attestExecution` is sent when `payerPrivateKey` is passed on that call. It is also sent when the host has `VEYA_SEAL_DECISION_RELAYER=1` and a relayer key, and the call omits `payerPrivateKey`. With the switch off and no payer key, `chain` is null and nothing is sent. The switch does not enable the host relayer for any other tool.
+
+**When to use it.** You have an evidence id and a decision object, and you want the sealed fingerprint, the quorum, and, when a payer is available, one `attestExecution` receipt.
+
+**Arguments.**
+
+| Name | Type | Required |
+|------|------|----------|
+| `evidenceId` | string | yes |
+| `decision` | string, a JSON object | yes |
+| `apiKey` | string | yes |
+| `payerPrivateKey` | string | no. Writes the receipt when passed |
+
+**What you get back.** On success, `ok` true, `evidenceId`, `sealed`, `attestation`, and `chain`. `chain` is the `attestExecution` receipt or null. A sealed-node miss sets MCP `isError` and returns the refusal object. A `decision` string that is not a JSON object returns `isError` with `transaction` null and `continuedOnOpenWorker` false.
 
 ---
 
@@ -223,7 +247,7 @@ With `anchor` true, the call also needs `environmentId` for an environment that 
 
 ## `veya_writes_status`
 
-**What it does.** Always registered. Explains that on-chain writes are **user-paid**: product `apiKey` + your wallet. Does not use the hosted relayer.
+**What it does.** Always registered. Explains that on-chain writes are **own-wallet**: product `apiKey` + your wallet. Does not use the hosted relayer.
 
 **When to use it.** Before a write, to confirm who pays gas.
 
@@ -235,7 +259,7 @@ With `anchor` true, the call also needs `environmentId` for an environment that 
 
 # 2. Post-quantum crypto (in this process)
 
-**Auth: none.** Keys are generated **here**, not on chain, unless you later call a user-paid write tool.
+**Auth: none.** Keys are generated **here**, not on chain, unless you later call a own-wallet write tool.
 
 Treat `privateKeyHex` like a secret. Do not paste it into public chats.
 
@@ -288,9 +312,9 @@ Treat `privateKeyHex` like a secret. Do not paste it into public chats.
 
 # 3. Fleet, sealed, Boundnet, local memory
 
-These call **SDK** helpers. On a public host, validator/sealed URLs should point at **API-owned** capacity. If nothing is listening, you get failure or `consensus_reached: false` — **never a fake agreed hash**.
+These call **SDK** helpers. On a public host, validator/sealed URLs should point at **API-owned** capacity. If nothing is listening, you get an error or `consensus_reached: false`.
 
-**Auth: none** on the MCP tool itself. That does **not** mean the fleet is public on the internet. The MCP server process is the one that may reach `127.0.0.1` on the **API machine**. Strangers still only talk to `mcp.veyanet.tech`.
+The fleet stays private; the MCP server reaches it on the API machine.
 
 ## `veya_run_consensus`
 
@@ -302,9 +326,9 @@ These call **SDK** helpers. On a public host, validator/sealed URLs should point
 
 | Name | Type | Required |
 |------|------|----------|
+| `apiKey` | string | yes |
 | `taskId` | string | yes |
 | `payload` | object | no (default `{}`) |
-| `nodeUrls` | array of URLs | no — uses server config |
 
 **What you get back.** `ConsensusResult`: `task_id`, `agreed_blake3_hash` (or null), `node_results`, `consensus_reached`, `threshold`, `reachable`. Agreement is **hash equality**. If two nodes are down, `consensus_reached` is false.
 
@@ -312,9 +336,11 @@ These call **SDK** helpers. On a public host, validator/sealed URLs should point
 
 ## `veya_client_run_consensus`
 
-**What it does.** Same job as `veya_run_consensus`, but through `VeyaClient.runConsensus` using this server’s default validator list (no override URLs).
+**What it does.** Deprecated: use `veya_run_consensus`. Same server validator list. Needs a product API key.
 
 **When to use it.** You want the client defaults, not a custom URL list.
+
+**Arguments.** `apiKey` (string, needed at call time), `taskId` (string, required), `payload` (object, default `{}`).
 
 ---
 
@@ -328,12 +354,12 @@ These call **SDK** helpers. On a public host, validator/sealed URLs should point
 
 | Name | Type | Required |
 |------|------|----------|
+| `apiKey` | string | yes |
 | `environmentId` | string | yes |
 | `agentId` | string | yes |
 | `eventType` | string | yes |
 | `payload` | object | yes |
 | `sessionEntropyHex` | hex, min 16 chars | yes |
-| `sealedNodeUrl` | URL | no — server default |
 
 **What you get back.** Sealed execution result JSON (commitment, verified flag, hashes). If unverified, the call errors. Seal is **AES-256-GCM**.
 
@@ -341,21 +367,13 @@ These call **SDK** helpers. On a public host, validator/sealed URLs should point
 
 ## `veya_set_tool_policy`
 
-**What it does.** In **this MCP process**, allow or deny a tool name for an `agentId` (SDK Boundnet map). Deny-by-default: if you never allow, route should deny.
-
-**Arguments.** `agentId`, `tool` (name), `allowed` (boolean).
-
-**What you get back.** `{ ok, agentId, tool, allowed }`.
-
-On the **public** path (`POST /mcp`), the MCP server object is created **per request** and thrown away. A policy you set in one tool call applies only to that request. Lasting room policy is `veya_boundnet_invoke` on the product API.
+**What it does.** Allow or deny a tool for an agent. Needs the API key that owns the environment. The rule is saved on that account. Arguments: `apiKey`, `environmentId`, `agentId`, `tool`, `allowed`.
 
 ---
 
 ## `veya_route_message`
 
-**What it does.** Checks Boundnet policy, then routes an inter-agent message (`fromAgent` → `toAgent` calling `tool` with `payload`).
-
-**Arguments.** `id`, `fromAgent`, `toAgent`, `tool`, `payload`.
+**What it does.** Checks the saved tool rule for this API key (`fromAgent` calling `tool`). Returns `policyStatus` `allowed` or `denied`. Arguments: `apiKey`, `environmentId`, `id`, `fromAgent`, `toAgent`, `tool`, `payload`.
 
 **What you get back.** Route result including `policyStatus` (`allowed` / `denied`). Denied stays `denied`.
 
@@ -365,7 +383,7 @@ On the **public** path (`POST /mcp`), the MCP server object is created **per req
 
 **What it does.** Same policy check, then wraps the message in a **Kyber-768** session and **ML-DSA-44** signature (harvest-now resistant envelope).
 
-**Arguments.** Same as route plus `senderPrivateKeyHex`, `senderPublicKeyHex`.
+**Arguments.** `apiKey`, `environmentId`, the route fields `id`, `fromAgent`, `toAgent`, `tool`, `payload`, then `senderPrivateKeyHex` and `senderPublicKeyHex`.
 
 **What you get back.** Secure envelope JSON (session id, signature, policy status).
 
@@ -383,15 +401,15 @@ On the **public** path (`POST /mcp`), the MCP server object is created **per req
 
 ## `veya_store_memory` / `veya_read_memory` / `veya_invalidate_memory`
 
-**What they do.** Local content-addressed memory on the **MCP machine** (`~/.veya`), with BLAKE3 integrity. Read recomputes the hash. Invalidate is spend-once / nullify for that local entry. Product console proofs use `veya_list_proofs` / `veya_anchor_proof` instead.
+**What they do.** Agent memory saved on the account behind the API key, through the product API (`/v1/environments/:id/scoped-memory`). Only the owner can read or nullify it. No key, no access.
 
 **Arguments.**
 
 | Tool | Args |
 |------|------|
-| store | `environmentId`, `agentId`, `data` |
-| read | `environmentId`, `id` |
-| invalidate | `environmentId`, `id` |
+| store | `apiKey`, `environmentId`, `agentId`, `data` |
+| read | `apiKey`, `environmentId`, `id` |
+| invalidate | `apiKey`, `environmentId`, `id` |
 
 ---
 
@@ -434,7 +452,7 @@ Return wrapper for `/public/*` tools: `{ httpStatus, body }`.
 
 **What they do.** Public attestation / certificate explorer rows (the public proof/certificate surface of the product API).
 
-**Arguments.** Same pagination pattern; get needs `id`.
+**Arguments.** List: optional `limit`, `offset`. Get: `id`.
 
 ---
 
@@ -492,7 +510,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 | `veya_run_protected_execution` | `POST /v1/environments/:id/executions/protected` |
 | `veya_boundnet_invoke` | `POST /v1/environments/:id/boundnet/invoke` |
 | `veya_list_proofs` | `GET /v1/proofs` |
-| `veya_anchor_proof` | User-paid `storeCommitment` (not the hosted relayer stamp) |
+| `veya_anchor_proof` | Own-wallet `storeCommitment` (not the hosted relayer stamp) |
 | `veya_verify_proof_api` | `GET /api/verify/:signature` (no key) |
 
 ### Guest vs product key
@@ -537,9 +555,9 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 ## `veya_create_environment`
 
-**What it does.** `POST /v1/environments` — **Build** API row. Does **not** spend gas. Register on chain with `veya_register_environment`.
+**What it does.** `POST /v1/environments` — **Build** API row. Does **not** spend gas. Register on chain with `veya_register_environment`. Names that start with test, demo, tmp, sandbox, or e2e are refused. Use a real workspace name of at least 6 characters, or a name that starts with VEYA.
 
-**Arguments.** `apiKey`, `name`, optional `type` (`research` \| `governance` \| `treasury` \| `contributor` \| `protocol` \| `desci`). Omitted `type` is stored as `research`. Creating a workspace does not perform a payment.
+**Arguments.** `apiKey` (or `sessionToken`), `name`, optional `type` (`research` \| `governance` \| `treasury` \| `contributor` \| `protocol` \| `desci`). Omitted `type` is stored as `research`. Creating a workspace sends no transaction.
 
 **Guest:** refused (`apiKey` must be a product key).
 
@@ -549,15 +567,15 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What they do.** List agents in a room, or deploy one (**Build**).
 
-**Deploy arguments.** `apiKey`, `environmentId`, optional `type` (stored as `coordination` when omitted), optional `agentKind`, optional `permissionConfig`. Put the tool names in `permissionConfig.allowedTools`. If that list is omitted, the agent cannot call a tool. Deploying an agent does not perform a payment.
+**Deploy arguments.** `apiKey`, `environmentId`, optional `type` (stored as `coordination` when omitted), `agentKind` (a display name of at least 3 characters; the API refuses an agent without it), optional `permissionConfig`. Put the tool names in `permissionConfig.allowedTools`. If that list is omitted, the agent cannot call a tool. Deploying an agent does not perform a payment.
 
 ---
 
 ## `veya_list_api_memory` / `veya_list_executions`
 
-**What they do.** List **product API** memory rows or execution rows for an environment (hosted DB), not `~/.veya` MCP-local memory.
+**What they do.** List **product API** memory rows or execution rows for an environment (hosted DB).
 
-**Memory optional `scope`:** `environment` \| `agent` \| `session`.
+**Arguments.** `apiKey` or `sessionToken`, `environmentId`. Memory also takes optional `scope`: `environment` \| `agent` \| `session`.
 
 ---
 
@@ -565,7 +583,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What it does.** `POST .../executions/protected` on the API — sealed path as the **hosted product** runs it (AES-256-GCM on the API’s sealed-node). **Build.** Product `apiKey` required.
 
-**Arguments.** `apiKey`, `environmentId`, `agentId`, `eventType`, `payload`, optional `disclose` / `seal` field name lists.
+**Arguments.** `apiKey` (or `sessionToken`), `environmentId`, `agentId`, `eventType`, `payload`, optional `disclose` / `seal` field name lists (sent to the API as `discloseFields` / `sealFields`).
 
 ---
 
@@ -573,7 +591,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What it does.** `POST .../boundnet/invoke` — agent may call `toolName` only if policy allows.
 
-**Arguments.** `apiKey`, `environmentId`, `agentId`, `toolName`, optional `arguments` object.
+**Arguments.** `apiKey` (or `sessionToken`), `environmentId`, `agentId`, `toolName`, optional `arguments` object.
 
 ---
 
@@ -581,19 +599,19 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 
 **What they do.** List stamps, or hash `label` + `content` with BLAKE3 and `storeCommitment` from **your** wallet.
 
-**Guest:** MCP refuses. Mint a product API key and fund your wallet.
+**Guest:** MCP refuses. Create a product API key at app.veyanet.tech and fund your wallet.
 
 **Anchor arguments.** `apiKey`, `payerPrivateKey` (or env), `label`, `content`, optional product `environmentId`.
 
-**What you get back.** `{ txHash, explorer, from, hash, label }`. `from` is your address.
+**What you get back.** `{ txHash, explorer, from, hash, label, recorded }` (plus `recordError` if the proof list could not save it). `from` is your address.
 
-Empty wallet: `You don't have testnet tokens. Please get them for the transaction.`
+Empty wallet: Mainnet: `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` Testnet: `You don't have testnet tokens. Please get them for the transaction.`
 
 ---
 
 ## `veya_verify_proof_api`
 
-**What it does.** Public product verify: `GET /api/verify/:signature` (tx hash). No key required.
+**What it does.** Public product verify: `GET /api/verify/:signature` (tx hash). No key required. It checks a commitment or anchor transaction. A registration transaction is not a proof and returns `NOT_VEYA_TX`.
 
 **Arguments.** `signature` (tx hash string).
 
@@ -608,7 +626,8 @@ Always registered. Every call needs a product `apiKey` and a funded `payerPrivat
 Empty wallet:
 
 ```text
-You don't have testnet tokens. Please get them for the transaction.
+Mainnet: Your wallet has no ETH on Robinhood Chain. Add funds and try again.
+Testnet: You don't have testnet tokens. Please get them for the transaction.
 ```
 
 Prefer self-hosting MCP so the private key stays in env, not in a tool argument to the public URL.
@@ -663,7 +682,7 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | Claim | Live value |
 |-------|--------|
 | Sealed | AES-256-GCM |
-| Chain | Robinhood **testnet 46630** |
+| This tree | Mainnet unless `ROBINHOOD_NETWORK=testnet` |
 | Guest Build | 403 |
 | Quorum | Real 2-of-3 or fail closed |
 | `Veya.sol` | Protocol contract |
@@ -677,23 +696,24 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_ping_chain` | Public | None |
 | `veya_hash_blake3` | Public | None |
 | `veya_verify_transaction` | Public | None |
-| `veya_prove` | Public read; write only with a payer argument | Payer key only when `anchor` is true |
+| `veya_prove` | Public read; anchor needs an API key and a payer | API key and payer key when `anchor` is true |
+| `veya_seal_decision` | Sealed decision; receipt when a payer is passed or the seal-decision relayer switch is on | API key; `payerPrivateKey` optional |
 | `veya_api_health` | Public | None |
 | `veya_writes_status` | Writes | None |
 | `veya_pq_keygen` | Crypto | None |
 | `veya_pq_sign` | Crypto | None |
 | `veya_pq_verify` | Crypto | None |
 | `veya_pq_fingerprint` | Fleet file | None |
-| `veya_run_consensus` | Fleet | None |
-| `veya_client_run_consensus` | Fleet | None |
-| `veya_sealed_execute` | Fleet | None |
-| `veya_set_tool_policy` | Fleet (in-process) | None |
-| `veya_route_message` | Fleet (in-process) | None |
-| `veya_route_secure_message` | Fleet (in-process) | None |
-| `veya_verify_secure_message` | Fleet (in-process) | None |
-| `veya_store_memory` | Fleet (`~/.veya`) | None |
-| `veya_read_memory` | Fleet (`~/.veya`) | None |
-| `veya_invalidate_memory` | Fleet (`~/.veya`) | None |
+| `veya_run_consensus` | Fleet (server validators) | API key |
+| `veya_client_run_consensus` | Fleet (deprecated alias) | API key |
+| `veya_sealed_execute` | Fleet (server sealed node) | API key |
+| `veya_set_tool_policy` | Account | API key |
+| `veya_route_message` | Account | API key |
+| `veya_route_secure_message` | Account | API key |
+| `veya_verify_secure_message` | Fleet | None |
+| `veya_store_memory` | Account | API key |
+| `veya_read_memory` | Account | API key |
+| `veya_invalidate_memory` | Account | API key |
 | `veya_public_stats` | Registry | None |
 | `veya_public_list_agents` | Registry | None |
 | `veya_public_get_agent` | Registry | None |
@@ -731,4 +751,4 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what is SDK vs API
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [QUICKSTART.md](./QUICKSTART.md) — first five minutes  
-- [TRANSPORT.md](./TRANSPORT.md) — why in-process Boundnet does not survive \POST /mcp
+- [TRANSPORT.md](./TRANSPORT.md) — tool policy is saved on the account
