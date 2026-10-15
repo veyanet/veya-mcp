@@ -1,6 +1,6 @@
-# Network Specifications — `@veyanet/mcp`
+# Networks — `@veyanet/mcp`
 
-Pinned settlement and public URLs. MCP and `@veyanet/sdk` must speak the **same** chain. If a host disagrees with this file, the host is misconfigured.
+The default profile is **Mainnet**. **Testnet** is `ROBINHOOD_NETWORK=testnet`. MCP and `@veyanet/sdk` use the same profiles. Numeric ids are listed once in the tables below.
 
 **[Architecture](./ARCHITECTURE.md)** • **[Verification](./VERIFICATION.md)** • **[Configuration](./CONFIGURATION.md)** • **[Quickstart](./QUICKSTART.md)**
 
@@ -8,7 +8,7 @@ Pinned settlement and public URLs. MCP and `@veyanet/sdk` must speak the **same*
 
 ## Table of contents
 
-1. [Robinhood Chain testnet](#1-robinhood-chain-testnet)
+1. [Profiles](#1-profiles)
 2. [Public VEYA URLs](#2-public-veya-urls)
 3. [npm packages](#3-npm-packages)
 4. [Live settlement facts](#4-live-settlement-facts)
@@ -19,26 +19,37 @@ Pinned settlement and public URLs. MCP and `@veyanet/sdk` must speak the **same*
 
 ---
 
-## 1. Robinhood Chain testnet
+## 1. Profiles
+
+`Veya.sol` is a protocol contract. It is not a token. Sealed execution is **AES-256-GCM**.
+
+### Mainnet (default)
 
 | Constant | Value |
 |----------|-------|
-| Network name | Robinhood Chain Testnet |
-| Chain ID (decimal) | `46630` |
-| Chain ID (hex) | `0xb626` |
+| Profile | Mainnet |
+| JSON-RPC | `https://rpc.mainnet.chain.robinhood.com` |
+| Explorer | `https://robinhoodchain.blockscout.com` |
+| Contract | `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674` |
+| Select | Omit `ROBINHOOD_NETWORK`, or set it to `mainnet` |
+| Payer slot | `VEYA_MAINNET_RELAYER_PRIVATE_KEY` only |
+
+### Testnet
+
+| Constant | Value |
+|----------|-------|
+| Profile | Testnet (optional) |
 | JSON-RPC | `https://rpc.testnet.chain.robinhood.com` |
 | Explorer | `https://explorer.testnet.chain.robinhood.com` |
-| Protocol contract | `Veya.sol` (environments, agents, commitments, attestations) |
-| Contract address | `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
-| Native gas token | ETH (18 decimals, amounts in wei) |
-
-Settlement today is this testnet pin. Sealed execution is **AES-256-GCM**.
+| Contract | `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| Select | `ROBINHOOD_NETWORK=testnet` |
+| Payer slot | `VEYA_RELAYER_PRIVATE_KEY`, then `VEYA_DEPLOYER_PRIVATE_KEY` |
 
 ---
 
 ## 2. Public VEYA URLs
 
-These are what a stranger actually uses.
+These are what a public user actually uses.
 
 | Service | URL |
 |---------|-----|
@@ -47,10 +58,10 @@ These are what a stranger actually uses.
 | MCP health | `https://mcp.veyanet.tech/health` |
 | Product API | `https://api.veyanet.tech` |
 | Product API health | `https://api.veyanet.tech/health` |
-| Marketing | `https://veyanet.tech` |
-| MCP marketing page | `https://veyanet.tech/mcp` |
+| Website | `https://veyanet.tech` |
+| MCP page | `https://veyanet.tech/mcp` |
 
-Product API health may be **`degraded`** when validators/sealed are not running on the API host. That is honest fleet status. MCP health can still be `ok`.
+Product API health shows fleet status (ok or degraded). MCP health can still be `ok`.
 
 ---
 
@@ -69,12 +80,12 @@ GitHub (when published): [veyanet/veya-mcp](https://github.com/veyanet/veya-mcp)
 
 | Topic | Live value |
 |-------|------------|
-| Settlement | Robinhood Chain testnet **46630** |
-| Contract | `Veya.sol` protocol contract at the address above |
+| This tree | Mainnet unless `ROBINHOOD_NETWORK=testnet` |
+| Contract | `Veya.sol`, protocol contract, not a token |
 | Sealed | AES-256-GCM |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Fleet | Owned by the product API (`api.veyanet.tech`) |
-| Operator fleet defaults | Self-host MCP may call `127.0.0.1:7701–7703` and `:7800` when colocated — see [CONFIGURATION.md](./CONFIGURATION.md) |
+| Operator fleet defaults | Self-host MCP may call `<validator-1..3-url>` and `:<sealed-port>` when colocated — see [CONFIGURATION.md](./CONFIGURATION.md) |
 
 ---
 
@@ -85,7 +96,13 @@ GitHub (when published): [veyanet/veya-mcp](https://github.com/veyanet/veya-mcp)
 | Contract | `{explorer}/address/{VEYA_CONTRACT_ADDRESS}` |
 | Transaction | `{explorer}/tx/{txHash}` |
 
-Contract:
+Mainnet contract:
+
+```text
+https://robinhoodchain.blockscout.com/address/0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674
+```
+
+Testnet contract, when `ROBINHOOD_NETWORK=testnet`:
 
 ```text
 https://explorer.testnet.chain.robinhood.com/address/0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84
@@ -95,7 +112,7 @@ https://explorer.testnet.chain.robinhood.com/address/0x1a1Dc3c55550FCE9F70ef6cDE
 
 ## 6. Example transactions
 
-These are live testnet receipts used in docs. They are not placeholders.
+These are example Testnet receipts (optional profile).
 
 | What | Tx |
 |------|----|
@@ -113,7 +130,7 @@ Self-host operators only. If you set `ROBINHOOD_CHAIN_ID` to something else, you
 
 Keep a custom pin aligned with RPC, explorer, and contract. SDK write paths call `ensureRobinhoodChain()` and reject a mismatched `eth_chainId`.
 
-`.env.example` has `ROBINHOOD_NETWORK=testnet`. MCP `loadConfig()` uses chain id `46630` as the pin.
+`ROBINHOOD_NETWORK=testnet` selects Testnet. Any other value, including unset, selects Mainnet. An explicit empty `VEYA_MAINNET_CONTRACT_ADDRESS` stays unpublished and sends nothing.
 
 ---
 
