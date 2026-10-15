@@ -28,7 +28,7 @@ From zero to a verified chain ping using **public** VEYA surfaces: the paste URL
 | Product API | `https://api.veyanet.tech` |
 | TypeScript library | `@veyanet/sdk` on npm |
 
-You need Node only if you install the SDK. Claude/Cursor users need no key to **read**. Product writes need a site API key. On-chain writes need **your** testnet ETH.
+You need Node only if you install the SDK. Claude/Cursor users need no key to **read**. Product writes need a site API key. On-chain writes need ETH on the selected profile. This tree defaults to Mainnet. Testnet is `ROBINHOOD_NETWORK=testnet`.
 
 ```mermaid
 flowchart LR
@@ -56,9 +56,9 @@ Optional check in a terminal:
 curl -s https://mcp.veyanet.tech/health
 ```
 
-You want `service` = `@veyanet/mcp`, `chainId` = `46630`, `sealed` mentioning AES-256-GCM.
+You want `service` = `@veyanet/mcp` and `sealed` mentioning AES-256-GCM. The default `network` is Mainnet.
 
-### Step 2 — Honesty card
+### Step 2 — Service info
 
 Ask the agent:
 
@@ -67,10 +67,10 @@ Ask the agent:
 You should see:
 
 - Package `@veyanet/mcp`
-- Chain id **46630**
-- Contract `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`
+- on Mainnet (or Testnet when selected)
+- Mainnet contract `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674`. Testnet contract `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`
 - Sealed = **AES-256-GCM**
-- Settlement = Robinhood testnet **46630**
+- Settlement names the selected profile
 - Writes need a product API key **and your funded wallet** (not the hosted relayer)
 - Fleet belongs to the product API; unreachable capacity fails closed
 
@@ -78,38 +78,40 @@ You should see:
 
 > Call `veya_ping_chain`.
 
-Confirm chain id **46630** and a block number. If this fails, later verify/write will fail too — RPC or pin problem.
+Confirm the chain id matches the profile (Mainnet by default) and a block number. If this fails, later verify/write will fail too — RPC or pin problem.
 
 ### Step 4 — Verify a real transaction
 
 > Call `veya_verify_transaction` with  
 > `0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8`
 
-Expect parsed `Veya.sol` events (for example `CommitmentStored`) and a digest. Open the Robinhood testnet explorer and match the `to` address to the contract.
+Expect parsed `Veya.sol` events (for example `CommitmentStored`) and a digest. Open the Robinhood Chain explorer for the selected network and match the `to` address to the contract.
 
-This proves a commitment landed. It does **not** prove FHE.
+This proves the commitment is on-chain.
 
 ### Step 5 — Product API health
 
 > Call `veya_api_health`.
 
-This is `GET https://api.veyanet.tech/health`. A **`degraded`** body usually means validators/sealed are not running on the API host. That is honest. MCP describe/ping can still work.
+This is `GET https://api.veyanet.tech/health`. This shows API and fleet status. MCP describe/ping work independently.
 
 ---
 
 ## 3. Part 2 — Product API key (writes)
 
-Mint `veya_dev_…` or `veya_live_…` on the product site after wallet login. Guests cannot mint keys.
+Create a `veya_dev_…` or `veya_live_…` key at [app.veyanet.tech](https://app.veyanet.tech): connect your wallet, open **System → API Keys**, and create a Dev (`veya_dev_…`) or Live (`veya_live_…`) key. The key is shown once. Guests cannot mint keys.
 
 > Call `veya_list_environments` with `apiKey` set to that key.
 
 Create environment is an API row (no gas). On-chain writes (`veya_store_commitment`, `veya_register_environment`, `veya_anchor_proof`) need the same key **plus** your wallet private key (`payerPrivateKey` or `VEYA_PAYER_PRIVATE_KEY` on a self-hosted MCP).
 
-If the wallet has no ETH:
+If the wallet has no ETH on Mainnet:
 
 ```text
-You don't have testnet tokens. Please get them for the transaction.
+Your wallet has no ETH on Robinhood Chain. Add funds and try again.
 ```
+
+On Testnet the sentence is: `You don't have testnet tokens. Please get them for the transaction.`
 
 `veya_guest_login` still lists Use rooms. Guest is **not** a write credential.
 
@@ -129,11 +131,12 @@ npm install @veyanet/sdk
 import { VeyaClient } from "@veyanet/sdk";
 
 const client = new VeyaClient({
-  // defaults: Robinhood testnet 46630 + public Veya.sol
+  // default: Mainnet
+  // Testnet: network: "testnet"
 });
 
 const ping = await client.pingChain();
-console.log(ping.chainId.toString()); // "46630"
+console.log(ping.chainId.toString()); // matches ROBINHOOD_MAINNET.chainId
 ```
 
 MCP remains the paste-URL agent surface. The SDK is crypto + chain in **your** process.
@@ -152,7 +155,7 @@ Sealed = **AES-256-GCM**. The public paste URL is `https://mcp.veyanet.tech/mcp`
 
 ## 6. Optional: run the HTTP binary yourself
 
-Only if you **operate** a host. Strangers should stay on `https://mcp.veyanet.tech/mcp`.
+Only if you **operate** a host. Public users should stay on `https://mcp.veyanet.tech/mcp`.
 
 ```bash
 npm install -g @veyanet/mcp
@@ -160,9 +163,9 @@ veya-mcp
 # or: npx -y @veyanet/mcp
 ```
 
-This starts **Streamable HTTP** on `PORT` (default 8788). Point a local client at `http://127.0.0.1:8788/mcp` for your own tests. After TLS, advertise the public HTTPS URL. See [DEPLOYMENT.md](./DEPLOYMENT.md) and [CONFIGURATION.md](./CONFIGURATION.md).
+This starts **Streamable HTTP** on `PORT` (default <mcp-port>). Point a local client at `<your-mcp-host>/mcp` for your own tests. After TLS, advertise the public HTTPS URL. See [DEPLOYMENT.md](./DEPLOYMENT.md) and [CONFIGURATION.md](./CONFIGURATION.md).
 
-Set `VEYA_PAYER_PRIVATE_KEY` to **your** testnet wallet if this process will send chain writes. Prefer that over pasting the key into a tool argument.
+Set `VEYA_PAYER_PRIVATE_KEY` to **your** wallet on the selected profile if this process will send chain writes. Prefer that over pasting the key into a tool argument.
 
 ---
 
@@ -175,8 +178,8 @@ Set `VEYA_PAYER_PRIVATE_KEY` to **your** testnet wallet if this process will sen
 | Describe ok, guest fails | Product API |
 | API health `degraded` | Fleet on API host |
 | Create environment refused | Guest JWT is not a product API key |
-| Write: apiKey required | Pass `veya_dev_` / `veya_live_` from the product site |
-| Write: no testnet tokens | Fund **your** wallet on Robinhood testnet 46630 |
+| Write: apiKey required | Pass `veya_dev_` / `veya_live_` from https://app.veyanet.tech (System → API Keys) |
+| Write: empty wallet | Fund **your** wallet. Mainnet is Robinhood Chain Mainnet. Testnet is Robinhood Chain Testnet |
 
 More: [VERIFICATION.md](./VERIFICATION.md).
 
