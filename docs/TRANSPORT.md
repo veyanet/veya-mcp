@@ -32,7 +32,7 @@ That means:
 - They `POST` JSON-RPC MCP messages (`initialize`, `tools/list`, `tools/call`, …).
 - The response may be ordinary JSON **or** `text/event-stream` (SSE). Smoke tests in this repo accept both.
 
-`veya-mcp` / `npx -y @veyanet/mcp` starts this **HTTP** server on `PORT`. Chain JSON-RPC is `@veyanet/sdk`. Product REST is `https://api.veyanet.tech`. For local operator tests you can POST `http://127.0.0.1:8788/mcp`. Production paste URL stays `https://mcp.veyanet.tech/mcp`.
+`veya-mcp` / `npx -y @veyanet/mcp` starts this **HTTP** server on `PORT`. Chain JSON-RPC is `@veyanet/sdk`. Product REST is `https://api.veyanet.tech`. For local operator tests you can POST `<your-mcp-host>/mcp`. Production paste URL stays `https://mcp.veyanet.tech/mcp`.
 
 Package used for the protocol: `@modelcontextprotocol/sdk` (`StreamableHTTPServerTransport`, `McpServer`).
 
@@ -44,17 +44,17 @@ Package used for the protocol: `@modelcontextprotocol/sdk` (`StreamableHTTPServe
 https://mcp.veyanet.tech/mcp
 ```
 
-Paste that into Claude or Cursor as a **Streamable HTTP** MCP server. That is the stranger path.
+Paste that into Claude or Cursor as a **Streamable HTTP** MCP server. That is the public path.
 
 Related URLs:
 
 | URL | Role |
 |-----|------|
 | `https://mcp.veyanet.tech/` | Human landing HTML |
-| `https://mcp.veyanet.tech/health` | Honesty JSON |
+| `https://mcp.veyanet.tech/health` | service info |
 | `https://mcp.veyanet.tech/mcp` | Tool calls |
 | `https://api.veyanet.tech` | Product API (not MCP transport) |
-| `https://veyanet.tech/mcp` | Marketing / docs page |
+| `https://veyanet.tech/mcp` | Website / docs page |
 
 ---
 
@@ -63,7 +63,7 @@ Related URLs:
 | Method | Path | Auth | Role |
 |--------|------|------|------|
 | `GET` | `/` | None | Landing HTML. Always tells humans to paste `https://mcp.veyanet.tech/mcp`. |
-| `GET` | `/health` | None | Honesty JSON (version, chain id, writes flag, sealed claim). |
+| `GET` | `/health` | None | service info (version, chain id, writes flag, sealed claim). |
 | `POST` | `/mcp` | None (keys are tool args) | **Primary** Streamable HTTP. Stateless. |
 | `POST` | `/mcp/session` | None | Optional session-id transport map. |
 
@@ -84,9 +84,7 @@ For **each** request, `src/http.ts` does:
 
 Writes take `apiKey` and `payerPrivateKey` as **tool arguments**, not HTTP Bearer.
 
-Why stateless? Public paste URL, many clients, no sticky sessions required. In-process Boundnet policy (`veya_set_tool_policy`) lives only for that request’s process lifetime — and because the **server object is discarded**, in-process policy does **not** survive across requests on `POST /mcp`. Hosted Boundnet (`veya_boundnet_invoke`) is the product API table; that **does** persist.
-
-If you need policy that lasts, use the **product API** Boundnet tools, not the in-process SDK map, when talking to the public URL.
+Why stateless? Public paste URL, many clients, no sticky sessions required. Tool policy is saved on the account through the product API, so it applies across requests.
 
 Errors that escape the handler return HTTP 500 JSON-RPC:
 
@@ -126,14 +124,14 @@ Shape (fields from code):
 |-------|---------|
 | `status` | `"ok"` if the MCP process is up (not a fleet check) |
 | `service` | `@veyanet/mcp` |
-| `version` | `1.2.3` (from `MCP_SERVICE_VERSION`) |
+| `version` | `1.2.8` (from `MCP_SERVICE_VERSION`) |
 | `publicMcpUrl` | From `PUBLIC_MCP_URL` env |
-| `chainId` | Configured pin (should be `46630`) |
+| `chainId` | Configured pin |
 | `contractAddress` | `Veya.sol` |
-| `writesEnabled` | `true` (user-paid write tools registered) |
-| `operatorRelayerWrites` | `false` (user-paid writes never use the host relayer) |
-| `sealed` | `"AES-256-GCM (not FHE)"` (exact health string from the process) |
-| `settlement` | `"Robinhood Chain testnet 46630"` |
+| `writesEnabled` | `true` (own-wallet write tools registered) |
+| `operatorRelayerWrites` | `false` (own-wallet writes never use the host relayer) |
+| `sealed` | `"AES-256-GCM"` |
+| `settlement` | `"Robinhood Chain Mainnet"` (or `"Robinhood Chain Testnet"` on Testnet) |
 
 This is **MCP process** health. Product fleet health is `veya_api_health` → `GET https://api.veyanet.tech/health`.
 
@@ -153,7 +151,7 @@ Landing may mention whether writes are enabled on **this** process. It must not 
 |--------|--------------|-----|
 | `Content-Type: application/json` | Client | Express JSON parser |
 | `Accept: application/json, text/event-stream` | Client | Streamable HTTP may SSE |
-| `Authorization: Bearer …` | unused for user-paid writes | leftover header; writes use tool `apiKey` |
+| `Authorization: Bearer …` | Client | Used for MCP_API_KEY when the host sets it |
 | `mcp-session-id` | Client | Only `/mcp/session` |
 | `Origin` | Browsers | CORS (see below) |
 
