@@ -1,8 +1,8 @@
 # Documentation Hub — `@veyanet/mcp`
 
-This folder is the documentation set for `@veyanet/mcp`, the Streamable HTTP Model Context Protocol server for VEYA on Robinhood Chain testnet **46630**.
+This folder is the documentation set for `@veyanet/mcp`. The default profile is **Mainnet**. **Testnet** is `ROBINHOOD_NETWORK=testnet`. Pins are in [NETWORK_PIN.md](./NETWORK_PIN.md).
 
-The root [README.md](../README.md) is the publish-facing intro. **CHANGELOG.md** at the repo root is the version history (leave that file as the source of releases). This hub is how a stranger learns **how the server is built** and **what each tool does**.
+The root [README.md](../README.md) is the publish-facing intro. **CHANGELOG.md** at the repo root is the version history (leave that file as the source of releases). This hub is how a public user learns **how the server is built** and **what each tool does**.
 
 ---
 
@@ -52,21 +52,22 @@ flowchart TB
 
 | Item | Value |
 |------|-------|
-| npm | `@veyanet/mcp` **1.2.3** |
-| SDK | `@veyanet/sdk` **^1.2.4** |
+| npm | `@veyanet/mcp` **1.2.8** |
+| SDK | `@veyanet/sdk` **^1.2.8** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Product API | `https://api.veyanet.tech` |
-| Chain | Robinhood testnet **46630** |
-| Contract | `Veya.sol` `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| Default profile | Mainnet |
+| Testnet (optional) | `ROBINHOOD_NETWORK=testnet` |
+| Mainnet contract | `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674` (protocol contract, not a token) |
 | Sealed | AES-256-GCM |
-| Writes | User-paid (product `apiKey` + your wallet) |
+| Writes | Own-wallet (product `apiKey` + your wallet) |
 
 ---
 
 ## Live facts
 
 - `Veya.sol` is a protocol contract (environments, agents, commitments, attestations).
-- Settlement is Robinhood **testnet 46630**.
+- Default network: Mainnet.
 - Guest sessions are **Use-only** (Build returns API **403**).
 - Quorum is matching BLAKE3 hashes (2-of-3); unreachable nodes return `consensus_reached: false`.
 - Public paste URL is `https://mcp.veyanet.tech/mcp`.
