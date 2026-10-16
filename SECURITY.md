@@ -2,7 +2,7 @@
 
 # VEYA MCP | Security Policy
 
-**Coordinated disclosure for `@veyanet/mcp` on Robinhood Chain testnet.**
+**Coordinated disclosure for `@veyanet/mcp` on Robinhood Chain.**
 
 **[README](./README.md)** • **[Authentication](./docs/AUTHENTICATION.md)** • **[Architecture](./docs/ARCHITECTURE.md)** • **[SDK Security](https://github.com/veyanet/veya-sdk/blob/main/SECURITY.md)**
 
@@ -57,8 +57,8 @@ Guest JWTs are product-API sessions. Do not treat them as unique human accounts.
 - Product `apiKey` is a **different** secret from a guest JWT. Mixing them is a configuration bug.
 - Guest JWT is listing-only from MCP.
 - Fleet URLs default to loopback so a colocated process can reach validators. Those ports must **not** be on the public firewall.
-- Sealed execution is **AES-256-GCM**. Honesty bugs that claim otherwise are in-scope as misleading security statements.
-- `Veya.sol` is a protocol contract. Docs that invent a token address are in-scope as honesty violations.
+- Sealed execution is **AES-256-GCM**. Docs or tool text that describe sealed execution incorrectly are in scope.
+- `Veya.sol` is a protocol contract. Docs that list a wrong contract address are in scope.
 
 Details: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md), [docs/AUTHENTICATION.md](./docs/AUTHENTICATION.md).
 
@@ -73,8 +73,8 @@ Report these against `@veyanet/mcp`:
 - Leakage of `payerPrivateKey` or `apiKey` via tool output, logs, `/health`, or landing HTML
 - CORS misconfiguration that exfiltrates credentialed browser sessions
 - Chain settlement against a mismatched chain id when writes are enabled (MCP failing to use SDK `ensureRobinhoodChain` / wrong pins)
-- Honesty violations that cause clients to believe FHE, mainnet, or ERC-20 are live
-- SSRF-style abuse if a tool forwards unsanitized URLs from callers into the MCP host’s network in a way that was not intended (custom `nodeUrls` / `sealedNodeUrl` on fleet tools — treat unexpected reachability as in-scope)
+- Misleading docs or tool text about features or contract type
+- SSRF-style abuse if a tool forwards unsanitized URLs from callers into the MCP host’s network. Fleet tools no longer take `nodeUrls` or `sealedNodeUrl`. Consensus and sealed execution use the server’s configured fleet URLs only.
 
 ---
 
@@ -112,9 +112,9 @@ Acknowledgment target: **72 hours**. Coordinated disclosure before public detail
 
 ## Operator hardening checklist
 
-- Public MCP serves free reads plus user-paid writes (product `apiKey` + user wallet). Do not enable a hosted relayer on the public URL
+- Public MCP serves open reads plus own-wallet writes (product `apiKey` + user wallet). Do not enable a hosted relayer on the public URL
 - `chmod 600` on `.env`
-- Do not expose `7701–7703` / `7800` on the public internet
+- Do not expose `their configured ports` / `<sealed-port>` on the public internet
 - Monitor the explorer for unexpected txs from **user** wallets that called this host
 - Rotate product API keys and payer keys on suspicion
 - Keep `PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp` so humans are never told to paste a private bind
