@@ -1,7 +1,7 @@
 {
   "name": "@veyanet/mcp",
-  "version": "1.2.3",
-  "description": "VEYA MCP - Streamable HTTP Model Context Protocol for Robinhood Chain (testnet 46630)",
+  "version": "1.2.8",
+  "description": "VEYA MCP - Streamable HTTP Model Context Protocol for Robinhood Chain. Default profile is Mainnet.",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -38,16 +38,19 @@
     "dev": "tsx watch src/cli.ts",
     "start": "node dist/cli.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "smoke": "tsx scripts/smoke.ts",
-    "verify": "tsx scripts/verify-full.ts"
+    "verify": "tsx scripts/verify-full.ts",
+    "user-agent": "tsx scripts/user-agent.ts",
+    "phase3-tester": "tsx scripts/user-agent.ts --phase3"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@veyanet/sdk": "^1.2.4",
+    "@veyanet/sdk": "^1.2.8",
     "cors": "^2.8.5",
     "ethers": "^6.17.0",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.1",
     "zod": "^3.24.2"
   },
   "devDependencies": {
