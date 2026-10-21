@@ -1,4 +1,4 @@
-import express, { type NextFunction, type Request, type Response } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { randomUUID, timingSafeEqual } from "node:crypto";
@@ -16,7 +16,7 @@ import { createMcpServer } from "./server.js";
 import { registeredToolCount, renderMcpInfoHtml, renderMcpRootHtml, wantsHtml } from "./mcpInfoPage.js";
 import { LOGO_PNG, LOGO_MARK_LIGHT_PNG } from "./brandAssets.js";
 
-export function createHttpApp(cfg: McpServiceConfig = loadConfig()) {
+export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
   const app = express();
   app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
