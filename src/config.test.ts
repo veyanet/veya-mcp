@@ -29,7 +29,7 @@ import {
 } from "./payer.js";
 
 describe("veyanet mcp config", () => {
-  it("defaults to mainnet 4663 and version 1.2.8", () => {
+  it("defaults to mainnet 4663 and version 1.2.9", () => {
     const prev = process.env.ROBINHOOD_NETWORK;
     const prevContract = process.env.VEYA_MAINNET_CONTRACT_ADDRESS;
     delete process.env.ROBINHOOD_NETWORK;
@@ -40,7 +40,7 @@ describe("veyanet mcp config", () => {
       assert.equal(cfg.network, "mainnet");
       assert.equal(cfg.chainId, 4663);
       assert.equal(cfg.contractAddress, MAINNET_PROTOCOL_CONTRACT);
-      assert.equal(MCP_SERVICE_VERSION, "1.2.8");
+      assert.equal(MCP_SERVICE_VERSION, "1.2.9");
     } finally {
       if (prev === undefined) delete process.env.ROBINHOOD_NETWORK;
       else process.env.ROBINHOOD_NETWORK = prev;
@@ -259,8 +259,8 @@ describe("veyanet mcp http", () => {
       assert.equal(res.status, 200);
       const body = (await res.json()) as Record<string, unknown>;
       assert.equal(body.service, MCP_SERVICE_NAME);
-      assert.equal(body.version, "1.2.8");
-      assert.equal(body.chainId, 4663);
+      assert.equal(body.version, "1.2.9");
+      assert.equal("chainId" in body, false);
       assert.equal(body.writesEnabled, true);
       assert.equal(body.operatorRelayerWrites, false);
       assert.match(String(body.sealed), /AES-256-GCM/);
