@@ -4,7 +4,7 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.2.8`
+**npm:** `@veyanet/mcp@1.2.9`
 
 Public users only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 
@@ -26,6 +26,7 @@ Public users only need that paste URL (and optionally `@veyanet/sdk`). This guid
 10. [Fleet on the same machine](#10-fleet-on-the-same-machine)
 11. [Secrets](#11-secrets)
 12. [Rollback](#12-rollback)
+13. [Optional: Paid Call Guard](#13-optional-paid-call-guard)
 
 ---
 
@@ -46,7 +47,7 @@ This package is the MCP HTTP process.
 | Component | Where it lives |
 |-----------|----------------|
 | Product REST + database | API host (`api.veyanet.tech`) |
-| validator-node ×3 | API host / private fleet (on the ports you configure, if colocated) |
+| validator-node ×3 | API host / private fleet (defaults `their configured ports` if colocated) |
 | sealed-node | API host / private fleet (default `<sealed-port>`) |
 | Chain | Robinhood Chain Mainnet |
 
@@ -194,7 +195,7 @@ curl -sS https://api.veyanet.tech/health
 Require MCP health:
 
 - `service` = `@veyanet/mcp`
-- `chainId` matches the selected profile: Mainnet by default, Testnet only when `ROBINHOOD_NETWORK=testnet`
+- `network` matches the selected profile: `mainnet` by default, `testnet` only when `ROBINHOOD_NETWORK=testnet`
 - `sealed` mentions `AES-256-GCM`
 - `writesEnabled` = `true` (own-wallet write tools; `operatorRelayerWrites` is `false`)
 - `publicMcpUrl` = `https://mcp.veyanet.tech/mcp`
@@ -222,7 +223,7 @@ Do not put a hosted relayer key on the public URL. Guest listing still works. On
 
 If you colocated MCP with validators:
 
-- Validators: `POST /execute` on the ports you configure
+- Validators: `POST /execute` on `their configured ports`
 - Sealed: `POST /protected` on `<sealed-port>`
 - Do not open those ports on the public firewall. Only Node on your host should call them.
 
@@ -249,3 +250,18 @@ Keep the previous `dist/` or npm version. This package has no database. Rollback
 Chain state stays on Robinhood Chain; MCP rollback does not change it.
 
 Related: [NETWORK_PIN.md](./NETWORK_PIN.md), [QUICKSTART.md](./QUICKSTART.md).
+
+---
+
+## 13. Optional: Paid Call Guard
+
+Off unless `VEYA_PAID_CALLS=1`. When on:
+
+- The state folder (`VEYA_PAID_STATE_DIR`) must be on a persistent disk, writable by the MCP process. It holds the run ledger, the audit log, `ledger.lock` and the optional `DISABLED` flag. Run one MCP process per state folder; do not scale the paid tools across several processes that share one folder.
+- The Solana payer key and the anchor key are files (mode `0600`) outside the repo; only their paths go in env.
+- Three validator nodes must be reachable from the MCP (`VEYA_PAID_VALIDATOR_NODES`). Do not expose validator nodes publicly.
+- Expose `/mcp` and `/receipts/paid/*` through the reverse proxy.
+- Set `VEYA_PAID_RECEIPTS_BASE_URL` to the public receipt base.
+- Rollback: set `VEYA_PAID_CALLS_DISABLED=1`, or unset `VEYA_PAID_CALLS`, and restart. No contract change is involved.
+
+Env and config reference: [CONFIGURATION.md](./CONFIGURATION.md#11-paid-call-guard). Feature guide: [PAID_CALLS.md](./PAID_CALLS.md).
