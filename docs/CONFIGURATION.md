@@ -22,6 +22,7 @@ Source of truth: `src/config.ts` (`loadConfig()`, `writesEnabled()`). Template: 
 8. [CORS](#8-cors)
 9. [Misconfiguration patterns](#9-misconfiguration-patterns)
 10. [Local operator example](#10-local-operator-example)
+11. [Paid Call Guard](#11-paid-call-guard)
 
 ---
 
@@ -71,7 +72,7 @@ Type `McpServiceConfig`:
 | `corsOrigins` | CSV `CORS_ORIGIN` |
 | `nodeEnv` | `NODE_ENV` |
 
-`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.8` (code constant, not read from env).
+`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.9` (read from `package.json`, not from env).
 
 ---
 
@@ -214,3 +215,43 @@ node dist/cli.js
 Then a **local** client can POST `<your-mcp-host>/mcp`. That URL is for you, not for the world.
 
 Related: [DEPLOYMENT.md](./DEPLOYMENT.md) for TLS.
+
+---
+
+## 11. Paid Call Guard
+
+Opt-in. Nothing below is read unless `VEYA_PAID_CALLS=1`. Guide: [PAID_CALLS.md](./PAID_CALLS.md).
+
+### Env vars
+
+| Variable | Type | Default |
+|----------|------|---------|
+| `VEYA_PAID_CALLS` | `1` to enable | off |
+| `VEYA_PAID_ROOT` | path | the package's parent folder |
+| `VEYA_PAID_CONFIG` | path | `<root>/config/paid-calls.json` |
+| `VEYA_PAID_STATE_DIR` | path | `<root>/state` |
+| `VEYA_PAID_RECEIPTS_DIR` | path | `<root>/receipts` |
+| `VEYA_PAID_SOLANA_KEY_PATH` | path to a Solana keypair JSON array | unset = paid calls fail closed |
+| `VEYA_PAID_ANCHOR_KEY_PATH` | path to the Robinhood Chain anchor key | unset = runs stop at `commit_failed` |
+| `VEYA_PAID_RECEIPTS_BASE_URL` | URL | unset = replies show the receipt file path |
+| `VEYA_PAID_VALIDATOR_NODES` | CSV of URLs | from the config file |
+| `VEYA_PAID_CALLS_DISABLED` | `1` = kill switch | off |
+
+Key files are read by path inside the server process. Never put key values in env, config or tool arguments.
+
+One MCP process per state folder (`ledger.lock`). A second process on the same folder gets `STATE_LOCKED`.
+
+### Config file (`config/paid-calls.json`)
+
+| Field | Meaning |
+|-------|---------|
+| `enabled` | `false` blocks every paid call. |
+| `recordVersion` | Version tag inside each anchored commitment record. |
+| `providers[]` | `id`, `label`, default `payer` (`xpay-sdk` or `x402-exact`). `xpay-sdk` providers also carry `sdk.platformFee` and `sdk.guardrail`. |
+| `resources[]` | `id`, `provider`, optional `payer` override, `url`, `method`, `input` (`required`, `optional`, `properties` with kinds `solana-address`, `slug`, `string`), `expectedResult`, and the pinned `x402` requirement (`scheme`, `network`, `asset`, `payTo`, `amount`, `feePayer`, `maxTimeoutSeconds`). |
+| `policy` | `allowedTools`, `allowedHosts`, `allowedNetworks`, `allowedAssets`, `allowedPayees`, `perCallCapAtomic`, `taskBudgetAtomic`, `approvalThresholdAtomic`, `maxCallsPerTask`. |
+| `solana` | Payer address, `commitment` (must be `finalized`), RPC list, explorer. |
+| `robinhood` | RPC, contract, environment UUID and explorer used for anchoring. |
+| `validators` | Node URLs, `threshold` (at least 2 of at least 3), and one Solana RPC per node from different providers. |
+
+The loader refuses a config with an unknown provider or payer path, an `xpay-sdk` provider without `sdk` settings, a non-`exact` pin, fewer than three validators, validators that share an RPC provider, or a commitment other than `finalized`.
