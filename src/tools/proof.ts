@@ -1,3 +1,4 @@
+import { publicReplacer } from "../publicJson.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VeyaClient, type ProveSource } from "@veyanet/sdk";
@@ -62,7 +63,7 @@ export function registerProofTools(server: McpServer, cfg: McpServiceConfig): vo
         const proof = await client.proveInput(source, { anchor: Boolean(anchor), environmentId });
         return {
           isError: !proof.ok,
-          content: [{ type: "text" as const, text: JSON.stringify(proof, null, 2) }],
+          content: [{ type: "text" as const, text: JSON.stringify(proof, publicReplacer, 2) }],
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
