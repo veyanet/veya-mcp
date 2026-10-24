@@ -12,6 +12,7 @@ import { registerCryptoTools } from "./tools/crypto.js";
 import { registerFleetTools } from "./tools/fleet.js";
 import { registerRegistryTools } from "./tools/registry.js";
 import { registerProductTools } from "./tools/product.js";
+import { registerPaidCallTools } from "./paid/tools.js";
 
 export function createMcpServer(cfg: McpServiceConfig): McpServer {
   const server = new McpServer({
@@ -27,6 +28,8 @@ export function createMcpServer(cfg: McpServiceConfig): McpServer {
   registerRegistryTools(server, cfg);
   registerProductTools(server, cfg);
   registerWriteTools(server, cfg);
+  // VEYA Paid Call Guard: opt-in only, so the hosted surface is unchanged unless enabled.
+  if (process.env.VEYA_PAID_CALLS === "1") registerPaidCallTools(server);
 
   return server;
 }
