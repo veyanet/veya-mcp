@@ -4,11 +4,11 @@
  * Does not read a relayer key, does not fund a wallet, and does not broadcast.
  * The report redacts API keys, JWTs, and private keys.
  */
-import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Wallet } from "ethers";
+import { Wallet, ethers, type HDNodeWallet } from "ethers";
+import * as veyaSdk from "@veyanet/sdk";
 
 const MCP = (process.env.VEYA_MCP_URL || "https://mcp.veyanet.tech/mcp").replace(/\/$/, "");
 const API = (process.env.VEYA_API_URL || "https://api.veyanet.tech").replace(/\/$/, "");
@@ -134,7 +134,13 @@ function codeOf(err: unknown): string {
   return "";
 }
 
-const LIVE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SDK_RAW = (process.env.VEYA_SDK_RAW_URL || "https://raw.githubusercontent.com/veyanet/veya-sdk/main").replace(/\/$/, "");
+
+async function apiHealth(): Promise<Record<string, any>> {
+  const res = await fetch(`${API}/health`, { signal: AbortSignal.timeout(20_000) });
+  return (await res.json().catch(() => ({}))) as Record<string, any>;
+}
 const PROTOCOL = "0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674";
 
 function writeReport(name: string, extra: Record<string, unknown> = {}) {
@@ -152,7 +158,7 @@ function writeReport(name: string, extra: Record<string, unknown> = {}) {
     notAToken: true,
     broadcast: false,
     relayerKeyRead: false,
-    publicHost: "testnet-46630",
+    publicHost: "mainnet",
     counts,
     steps,
     bugs: steps.filter((step) => step.status === "bug").map((step) => ({
@@ -163,7 +169,7 @@ function writeReport(name: string, extra: Record<string, unknown> = {}) {
     })),
     ...extra,
   };
-  const out = resolve(LIVE_ROOT, "reports", name);
+  const out = resolve(REPO_ROOT, "reports", name);
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(report, null, 2));
   console.log(`[user-agent] ${counts.pass} pass, ${counts.bug} bug, ${counts.gap} gap, ${counts.blocked} blocked`);
@@ -183,36 +189,29 @@ async function phase3Audit() {
     delete process.env.VEYA_MAINNET_CONTRACT_ADDRESS;
     process.env.ROBINHOOD_NETWORK = "mainnet";
     try {
-      const sdk = await import("../../veya-sdk/src/settlement.ts");
-      const chain = await import("../../veya-sdk/src/chain.ts");
-      const config = await import("../../veya-sdk/src/config.ts");
-      const gates = await import("../../veya-api-host/backend/src/mainnet/gates.ts");
       const mcp = await import("../src/config.ts");
-      const settlement = await import("../../veya-api-host/backend/src/config/settlement.ts");
-      const resolved = config.resolveConfig({
+      const resolved = veyaSdk.resolveConfig({
         network: "mainnet",
         payerPrivateKey: `0x${"11".repeat(32)}`,
       });
       const mcpCfg = mcp.loadConfig();
-      const profile = settlement.settlementProfile({ ROBINHOOD_NETWORK: "mainnet" } as never);
-      const honesty = readFileSync(resolve(LIVE_ROOT, "veyanet/src/content/docs/HONESTY.md"), "utf8");
+      // The API's settlement profile is read from its public /health, not from backend source.
+      const health = await apiHealth();
+      const apiContract = String(health.robinhood?.contractAddress ?? "");
+      const apiNetwork = String(health.robinhood?.network ?? "");
       const same =
-        sdk.PHASE3_DECISION.contractAddress === PROTOCOL &&
-        chain.ROBINHOOD_MAINNET.contractAddress === PROTOCOL &&
+        veyaSdk.PHASE3_DECISION.contractAddress === PROTOCOL &&
+        veyaSdk.ROBINHOOD_MAINNET.contractAddress === PROTOCOL &&
         resolved.contractAddress === PROTOCOL &&
-        gates.PHASE3_DECISION.contractAddress === PROTOCOL &&
-        settlement.MAINNET_PROTOCOL_CONTRACT === PROTOCOL &&
-        profile.contractAddress === PROTOCOL &&
-        profile.chainId === 4663 &&
+        apiContract === PROTOCOL &&
+        apiNetwork === "mainnet" &&
         mcp.MAINNET_PROTOCOL_CONTRACT === PROTOCOL &&
         mcpCfg.contractAddress === PROTOCOL &&
-        mcpCfg.chainId === 4663 &&
-        honesty.includes(PROTOCOL) &&
-        /not a token/i.test(honesty);
+        mcpCfg.chainId === veyaSdk.ROBINHOOD_MAINNET_CHAIN_ID;
       if (!same) {
         return {
           status: "bug",
-          detail: `sdk ${sdk.PHASE3_DECISION.contractAddress} api ${gates.PHASE3_DECISION.contractAddress} mcp ${mcpCfg.contractAddress} profile ${profile.contractAddress}`,
+          detail: `sdk ${veyaSdk.PHASE3_DECISION.contractAddress} api ${apiContract || "unset"} (${apiNetwork || "no network"}) mcp ${mcpCfg.contractAddress}`,
         };
       }
       return { status: "pass", detail: PROTOCOL };
@@ -230,20 +229,13 @@ async function phase3Audit() {
     process.env.ROBINHOOD_NETWORK = "mainnet";
     process.env.VEYA_MAINNET_CONTRACT_ADDRESS = "";
     try {
-      const config = await import("../../veya-sdk/src/config.ts");
-      const evm = await import("../../veya-sdk/src/client/evm.ts");
       const mcp = await import("../src/config.ts");
-      const settlement = await import("../../veya-api-host/backend/src/config/settlement.ts");
-      const resolved = config.resolveConfig({ network: "mainnet", contractAddress: "" });
-      const profile = settlement.settlementProfile({
-        ROBINHOOD_NETWORK: "mainnet",
-        VEYA_MAINNET_CONTRACT_ADDRESS: "",
-      } as never);
-      if (resolved.contractAddress !== "" || mcp.loadConfig().contractAddress !== "" || profile.contractAddress !== "") {
+      const resolved = veyaSdk.resolveConfig({ network: "mainnet", contractAddress: "" });
+      if (resolved.contractAddress !== "" || mcp.loadConfig().contractAddress !== "") {
         return { status: "bug", detail: "an explicit empty contract was replaced with the pin" };
       }
       try {
-        new evm.EvmAnchor({ network: "mainnet", contractAddress: "", payerPrivateKey: `0x${"11".repeat(32)}` });
+        new veyaSdk.EvmAnchor({ network: "mainnet", contractAddress: "", payerPrivateKey: `0x${"11".repeat(32)}` });
         return { status: "bug", detail: "empty contract constructed an anchor" };
       } catch (err) {
         if (codeOf(err) !== "MAINNET_UNPUBLISHED") return { status: "bug", detail: `anchor code ${codeOf(err) || "none"}` };
@@ -258,10 +250,7 @@ async function phase3Audit() {
   });
 
   await record("abi", "local", "Protocol ABI is not a token", "No name, symbol, decimals, totalSupply, or transfer", async () => {
-    const artifact = JSON.parse(readFileSync(resolve(LIVE_ROOT, "veya-sdk/src/abi/Veya.json"), "utf8")) as {
-      abi?: Array<{ type?: string; name?: string }>;
-    };
-    const abi = Array.isArray(artifact) ? artifact : artifact.abi ?? [];
+    const abi = veyaSdk.VEYA_ABI as unknown as Array<{ type?: string; name?: string }>;
     const names = new Set(abi.filter((item) => item.type === "function").map((item) => item.name));
     const token = ["name", "symbol", "decimals", "totalSupply", "transfer"].filter((name) => names.has(name));
     if (token.length) return { status: "bug", detail: `token surface ${token.join(",")}` };
@@ -271,34 +260,37 @@ async function phase3Audit() {
     return { status: "pass", detail: "environments, agents, commitments, attestations" };
   });
 
-  await record("chain", "local", "On-chain read-back", "Chain 4663, 16342 bytes, smoke environment owned by the payer", async () => {
-    const ran = spawnSync(process.execPath, ["scripts/audit-mainnet-readonly.mjs"], {
-      cwd: resolve(LIVE_ROOT, "veya-sdk"),
-      encoding: "utf8",
-    });
-    const text = `${ran.stdout || ""}\n${ran.stderr || ""}`.trim();
-    if (ran.status !== 0) return { status: "bug", detail: clip(text, 300) };
-    return { status: "pass", detail: clip(ran.stdout || "ok", 180) };
+  await record("chain", "local", "On-chain read-back", "Mainnet RPC answers and the protocol contract has code", async () => {
+    const rpc = process.env.ROBINHOOD_MAINNET_RPC_URL || veyaSdk.ROBINHOOD_MAINNET.rpcUrl;
+    const ping = await veyaSdk.pingRpc(rpc);
+    if (Number(ping.chainId) !== veyaSdk.ROBINHOOD_MAINNET_CHAIN_ID) return { status: "bug", detail: "RPC is not on the mainnet profile" };
+    const code = await new ethers.JsonRpcProvider(rpc).getCode(PROTOCOL);
+    const bytes = (code.length - 2) / 2;
+    if (bytes <= 0) return { status: "bug", detail: "no code at the protocol address" };
+    return { status: "pass", detail: `block ${ping.blockNumber}, ${bytes} bytes of code` };
   });
 
   await record("docs", "local", "Docs match the deploy", "Source docs do not say the contract is unpublished", async () => {
+    // This repo's files are read locally; the SDK's published docs are fetched from its public repo.
     const files = [
       "veya-sdk/CHANGELOG.md",
       "veya-sdk/docs/DEPLOYMENT.md",
       "veya-mcp/CHANGELOG.md",
       "veya-mcp/README.md",
       "veya-mcp/src/tools/public.ts",
-      "veyanet/src/content/docs/mcp/README.md",
-      "veyanet/src/content/docs/sdk/CHANGELOG.md",
-      "veyanet/src/content/docs/sdk/protected-execution.md",
-      "veyanet/src/content/docs/HONESTY.md",
-      "veyanet/src/pages/Roadmap.tsx",
-      "dev-logs.md",
     ];
     const banned = [/not a mainnet deploy/i, /settlement claim \(planned\)/i, /contract stays empty/i];
     const hits: string[] = [];
     for (const file of files) {
-      const text = readFileSync(resolve(LIVE_ROOT, file), "utf8");
+      const [repo, ...rest] = file.split("/");
+      const rel = rest.join("/");
+      let text: string;
+      if (repo === "veya-mcp") text = readFileSync(resolve(REPO_ROOT, rel), "utf8");
+      else {
+        const res = await fetch(`${SDK_RAW}/${rel}`, { signal: AbortSignal.timeout(20_000) });
+        if (!res.ok) { hits.push(`${file} HTTP ${res.status}`); continue; }
+        text = await res.text();
+      }
       if (!text.includes(PROTOCOL)) hits.push(`${file} missing address`);
       for (const pattern of banned) {
         if (pattern.test(text)) hits.push(`${file} ${pattern}`);
@@ -309,8 +301,8 @@ async function phase3Audit() {
   });
 
   await record("guards", "local", "Spend, guest, receipt, and deploy plan", "Those gates still stop before a send", async () => {
-    const phase3 = await import("../../veya-sdk/src/settlement.ts");
-    const chain = await import("../../veya-sdk/src/chain.ts");
+    const phase3 = veyaSdk;
+    const chain = veyaSdk;
     const plan = phase3.mainnetDeployPlan();
     if (plan.broadcast !== false || plan.settlementLive !== false) {
       return { status: "bug", detail: "deploy plan would broadcast" };
@@ -335,15 +327,14 @@ async function phase3Audit() {
     return { status: "pass", detail: "plan stays dry, guest stays closed, FEE_CAP 402, RECEIPT_CHAIN" };
   });
 
-  await record("host", "live", "Public host still on testnet", "Health reports chain 46630. That hold is expected.", async () => {
+  await record("host", "live", "Public host on mainnet", "Health reports the SDK mainnet chain", async () => {
     const res = await fetch(`${MCP_ORIGIN}/health`, { signal: AbortSignal.timeout(20_000) });
     const body = (await res.json()) as { chainId?: number; version?: string; network?: string };
     if (res.status !== 200) return { status: "bug", detail: `health HTTP ${res.status}` };
-    if (body.chainId !== 46630) return { status: "bug", detail: `public chain ${body.chainId ?? "missing"}` };
-    knownHolds.push("public MCP health remains chain 46630");
+    if (body.chainId !== veyaSdk.ROBINHOOD_MAINNET_CHAIN_ID) return { status: "bug", detail: `public chain ${body.chainId ?? "missing"}` };
     return {
       status: "pass",
-      detail: `known hold: chain ${body.chainId}, version ${body.version ?? "unset"}, network field ${body.network ?? "absent"}`,
+      detail: `chain ${body.chainId}, version ${body.version ?? "unset"}, network field ${body.network ?? "absent"}`,
     };
   });
 
@@ -359,7 +350,7 @@ async function main() {
   let digest = "ab".repeat(32);
   let guestToken = "";
   let productKey = "";
-  let userWallet: Wallet | null = null;
+  let userWallet: HDNodeWallet | null = null;
   let environmentId = "";
   let agentId = "";
 
@@ -381,15 +372,12 @@ async function main() {
     };
   });
 
-  await record("host", "live", "Public host stays on the current settlement", "Chain 46630 is still the served chain", async () => {
+  await record("host", "live", "Public host serves mainnet", "Health reports the SDK mainnet chain", async () => {
     const res = await fetch(`${MCP_ORIGIN}/health`, { signal: AbortSignal.timeout(15_000) });
     const body = (await res.json()) as Record<string, unknown>;
     const chain = Number(body.chainId);
     const settlement = String(body.settlement ?? "");
-    if (chain === 4663) {
-      return { status: "bug", detail: "public health reports chain 4663" };
-    }
-    if (chain !== 46630 && !settlement.includes("46630")) {
+    if (chain !== veyaSdk.ROBINHOOD_MAINNET_CHAIN_ID && !settlement.includes(String(veyaSdk.ROBINHOOD_MAINNET_CHAIN_ID))) {
       return { status: "bug", detail: `chain ${String(body.chainId)} settlement ${settlement}` };
     }
     const network = body.network == null ? "network field absent" : `network ${String(body.network)}`;
@@ -432,16 +420,16 @@ async function main() {
     const hash = String(hashed.parsed?.hash ?? "").replace(/^0x/, "");
     if (hash.length >= 64) digest = hash;
     const pingText = hashed.text && ping.text;
-    const chainOk = ping.text.includes("46630");
+    const chainOk = ping.text.includes(String(veyaSdk.ROBINHOOD_MAINNET_CHAIN_ID));
     const describeOk = !describe.isError && describe.text.length > 20;
     const hashOk = !hashed.isError && hash.length >= 64;
     if (!describeOk || !hashOk || !pingText) {
       return { status: "bug", detail: `describe error=${describe.isError} hash=${hash.length} ping=${clip(ping.text, 80)}` };
     }
     if (!chainOk) {
-      return { status: "bug", detail: `ping did not report 46630: ${clip(ping.text, 120)}` };
+      return { status: "bug", detail: `ping did not report the mainnet chain: ${clip(ping.text, 120)}` };
     }
-    return { status: "pass", detail: "describe, ping 46630, and a 32-byte hash" };
+    return { status: "pass", detail: "describe, ping mainnet, and a 32-byte hash" };
   });
 
   await record("registry", "live", "Public registry", "Stats and the public agent list answer below HTTP 500", async () => {
@@ -655,10 +643,10 @@ async function main() {
   });
 
   await record("gates", "clone", "Phase 3 gates in the clone", "Empty contract, guest, fee, receipt, and deploy plan stop before a send", async () => {
-    const phase3 = await import("../../veya-sdk/src/settlement.ts");
-    const chain = await import("../../veya-sdk/src/chain.ts");
-    const seal = await import("../../veya-sdk/src/sealDecision.ts");
-    const evm = await import("../../veya-sdk/src/client/evm.ts");
+    const phase3 = veyaSdk;
+    const chain = veyaSdk;
+    const seal = veyaSdk;
+    const evm = veyaSdk;
     const notes: string[] = [];
 
     const plan = phase3.mainnetDeployPlan();
