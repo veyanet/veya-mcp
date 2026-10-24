@@ -14,6 +14,7 @@ import {
 } from "./config.js";
 import { createMcpServer } from "./server.js";
 import { registeredToolCount, renderMcpInfoHtml, renderMcpRootHtml, wantsHtml } from "./mcpInfoPage.js";
+import { mountPaidReceipts } from "./paid/receiptRoutes.js";
 import { LOGO_PNG, LOGO_MARK_LIGHT_PNG } from "./brandAssets.js";
 
 export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
@@ -40,7 +41,6 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
       version: MCP_SERVICE_VERSION,
       publicMcpUrl: cfg.publicMcpUrl,
       network: cfg.network,
-      chainId: cfg.chainId,
       contractAddress: cfg.contractAddress,
       writesEnabled: true,
       operatorRelayerWrites: operatorRelayerWritesEnabled(cfg),
@@ -178,6 +178,8 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
       }
     }
   });
+
+  if (process.env.VEYA_PAID_CALLS === "1") mountPaidReceipts(app);
 
   app.get("/", (_req, res) => {
     res.type("html").send(renderMcpRootHtml(cfg, registeredToolCount(cfg)));
