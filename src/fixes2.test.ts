@@ -156,7 +156,7 @@ describe("fixes2 mcp", () => {
   it("ping_chain config hides fleet URLs; health settlement has no chain id; sealed is plain AES-256-GCM", async () => {
     const c = publicClientConfig({ network: "testnet", validatorNodes: ["http://127.0.0.1:7701", "http://127.0.0.1:7702"], sealedNodeUrl: "http://127.0.0.1:7800" });
     assert.ok(!JSON.stringify(c).includes("127.0.0.1")); assert.equal(c.validators, 2); assert.equal(c.sealedNodeConfigured, true);
-    const h = (await (await fetch(`${base}/health`)).json()) as { settlement: string; sealed: string; chainId: number };
-    assert.equal(h.settlement, "Robinhood Chain testnet"); assert.equal(h.sealed, "AES-256-GCM"); assert.equal(h.chainId, 46630);
+    const h = (await (await fetch(`${base}/health`)).json()) as { settlement: string; sealed: string; chainId?: number };
+    assert.equal(h.settlement, "Robinhood Chain testnet"); assert.equal(h.sealed, "AES-256-GCM"); assert.equal(h.chainId, undefined);
   });
 });
