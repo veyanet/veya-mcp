@@ -10,12 +10,13 @@ From zero to a verified chain ping using **public** VEYA surfaces: the paste URL
 
 1. [What you will use](#1-what-you-will-use)
 2. [Part 1 — Connect the public MCP](#2-part-1--connect-the-public-mcp)
-3. [Part 2 — Optional guest Use path](#3-part-2--optional-guest-use-path)
+3. [Part 2 — Product API key (writes)](#3-part-2--product-api-key-writes)
 4. [Part 3 — TypeScript SDK](#4-part-3--typescript-sdk)
 5. [What consensus and sealed mean for you](#5-what-consensus-and-sealed-mean-for-you)
 6. [Optional: run the HTTP binary yourself](#6-optional-run-the-http-binary-yourself)
 7. [If something fails](#7-if-something-fails)
 8. [Next reading](#8-next-reading)
+9. [Optional: Paid Call Guard (operators)](#9-optional-paid-call-guard-operators)
 
 ---
 
@@ -78,7 +79,7 @@ You should see:
 
 > Call `veya_ping_chain`.
 
-Confirm the chain id matches the profile (Mainnet by default) and a block number. If this fails, later verify/write will fail too — RPC or pin problem.
+Confirm a recent block number and the expected contract. The chain ID is checked inside the SDK. If this fails, later verify/write will fail too — RPC or pin problem.
 
 ### Step 4 — Verify a real transaction
 
@@ -192,3 +193,18 @@ More: [VERIFICATION.md](./VERIFICATION.md).
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [AUTHENTICATION.md](./AUTHENTICATION.md) — product key vs your wallet  
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — MCP vs SDK  
+- [PAID_CALLS.md](./PAID_CALLS.md) — opt-in Paid Call Guard
+
+---
+
+## 9. Optional: Paid Call Guard (operators)
+
+The public URL does not enable paid calls. A host that wants agents to call paid x402 resources under a VEYA policy turns it on:
+
+1. Build: `npm ci && npm run build`.
+2. Place the Solana payer key file and the anchor key file on the host (mode `0600`, outside the repo).
+3. Start three validator nodes.
+4. Start the server with `VEYA_PAID_CALLS=1`, `VEYA_PAID_ROOT`, `VEYA_PAID_SOLANA_KEY_PATH` and `VEYA_PAID_ANCHOR_KEY_PATH` set.
+5. From your client: `veya_paid_discover`, then a blocked call (for example `taskBudgetAtomic: "15000"`), then one allowed `veya_paid_call`.
+
+Full steps, arguments and states: [PAID_CALLS.md](./PAID_CALLS.md).
