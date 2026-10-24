@@ -67,7 +67,8 @@ export function safeRequestMessage(err: unknown): string {
   return "API not reachable";
 }
 
-function jsonReplacer(_key: string, value: unknown): unknown {
+function jsonReplacer(key: string, value: unknown): unknown {
+  if (key === "chainId" || key === "chainIdHex" || key === "expectedChainId" || key === "chosenChainId") return undefined;
   if (typeof value === "bigint") return value.toString();
   if (value instanceof Uint8Array) return `0x${Buffer.from(value).toString("hex")}`;
   if (value instanceof Error) return value.message;
