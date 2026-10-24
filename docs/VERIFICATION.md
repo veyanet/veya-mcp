@@ -14,10 +14,11 @@ You need a browser, `curl`, an MCP client (or this repo’s smoke script if you 
 2. [Procedure A — public reads (no keys)](#2-procedure-a--public-reads-no-keys)
 3. [Procedure B — product API service info](#3-procedure-b--product-api-service-info)
 4. [Procedure C — independent SDK check](#4-procedure-c--independent-sdk-check)
-5. [Procedure D — operator writes (keys)](#5-procedure-d--operator-writes-keys)
+5. [Procedure D — own-wallet writes](#5-procedure-d--own-wallet-writes)
 6. [Repo scripts](#6-repo-scripts)
 7. [Evidence pack](#7-evidence-pack)
 8. [Pass / fail table](#8-pass--fail-table)
+9. [Procedure E — Paid Call Guard runs](#9-procedure-e--paid-call-guard-runs)
 
 ---
 
@@ -26,7 +27,7 @@ You need a browser, `curl`, an MCP client (or this repo’s smoke script if you 
 Three facts:
 
 1. The MCP host is up (`/health`, `veya_describe`): the selected profile, sealed = **AES-256-GCM**. This tree's default is Mainnet.
-2. Robinhood RPC chain id matches that profile (`veya_ping_chain`).
+2. The Robinhood Chain RPC answers on that profile (`veya_ping_chain`). The SDK checks the RPC chain internally and fails closed on a mismatch.
 3. A known (or newly written) `Veya.sol` transaction parses, and optionally the `commitments(digest)` mapping still returns true.
 
 A pass means those facts match the live host. Product API /health shows ok or degraded (fleet status). Guest sessions are Use-only. Quorum is matching hashes: if validators are unreachable, `consensus_reached` is false.
@@ -46,12 +47,12 @@ Require:
 | Field | Expected |
 |-------|----------|
 | `service` | `@veyanet/mcp` |
-| `chainId` | Matches the selected profile (Mainnet by default) |
 | `sealed` | contains `AES-256-GCM` |
 | `settlement` | Robinhood Chain plus the selected profile |
 | `publicMcpUrl` | `https://mcp.veyanet.tech/mcp` |
 | `writesEnabled` | `true` (own-wallet tools). Check `operatorRelayerWrites` is `false` on the public host |
-| `contractAddress` | `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84` |
+| `network` | `mainnet` (or `testnet` on a Testnet host) |
+| `contractAddress` | `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674` (Mainnet) |
 
 ### A2. Describe
 
@@ -63,23 +64,23 @@ Cross-check name `@veyanet/mcp`, version, contract, RPC, explorer, `sealed` text
 
 Call `veya_ping_chain`.
 
-Require `chainId` / `expectedChainId` to match the selected profile (Mainnet by default). A recent block number means RPC is alive. If chain id differs from that profile, **stop** — the host is mis-pinned.
+A recent block number and the expected contract mean the RPC is alive and on the selected profile. The chain ID is checked inside the SDK and is not part of the reply. If the SDK reports `CHAIN_MISMATCH`, **stop**: the host is mis-pinned.
 
 ### A4. Verify a known transaction
 
 Call `veya_verify_transaction` with:
 
 ```text
-0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8
+0xa09f361779af4910157906937d54fc1f670fc7e6044aa06e62f25f5cca07461c
 ```
 
 Open:
 
 ```text
-https://explorer.testnet.chain.robinhood.com/tx/0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8
+https://robinhoodchain.blockscout.com/tx/0xa09f361779af4910157906937d54fc1f670fc7e6044aa06e62f25f5cca07461c
 ```
 
-Confirm the explorer `to` address is `Veya.sol` and the tool’s parsed digest/events match the receipt. This tx is a sealed-execution **commitment** path used in docs.
+Confirm the explorer `to` address is `Veya.sol` and the tool’s parsed digest/events match the receipt. This is a Mainnet `storeCommitment` transaction on `Veya.sol` (a Paid Call Guard run record).
 
 ### A5. Stronger on-chain mapping check
 
@@ -109,7 +110,7 @@ npm install @veyanet/sdk
 
 Use `VeyaClient` on the same profile as the MCP host. The SDK default is Mainnet. Pass `network: "testnet"` when the host is Testnet. Call `pingChain()` and `verifyTransaction(txHash)` (or this repo’s sibling SDK examples if you cloned [veyanet/veya-sdk](https://github.com/veyanet/veya-sdk)).
 
-If the SDK chain id and MCP health disagree, MCP env is wrong.
+If the SDK profile (network, contract) and MCP health disagree, MCP env is wrong.
 
 ---
 
@@ -133,7 +134,7 @@ Public paste URL still allows reads with no key. Prefer self-host for `VEYA_PAYE
 | Command | What it checks |
 |---------|----------------|
 | `npm run smoke` | In-process `initialize`, `tools/list` (51 tools), `veya_describe`, `veya_ping_chain` |
-| `npm test` | Unit tests (config, etc.) |
+| `npm test` | Unit tests (config, etc.) and the Paid Call Guard suite in `src/paid/` (mock money; needs the three validator nodes running) |
 | `npm run lint` | `tsc --noEmit` |
 | `tsx scripts/verify-full.ts` | Local MCP workflow: reads need no key, apiKey required for product tools, unfunded payer message |
 | `tsx scripts/verify-live.ts` | Live public endpoints (operator) |
@@ -171,3 +172,24 @@ Keep these artifacts for diligence:
 | Consensus with fleet down | `consensus_reached: false` or tool error |
 
 Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for product keys and own-wallet gas.
+
+---
+
+## 9. Procedure E — Paid Call Guard runs
+
+Only for hosts with `VEYA_PAID_CALLS=1`. See [PAID_CALLS.md](./PAID_CALLS.md).
+
+1. `tools/list` shows **54 tools**, including `veya_paid_discover`, `veya_paid_call`, `veya_paid_run`, and no transfer, swap, trade or key tool.
+2. Open the receipt: `GET /receipts/paid/<runId>` (or `.json`).
+3. **Payment.** Open the Solscan link. The transaction is finalized and moves the quoted amount of the pinned mint from the payer to the payee.
+4. **Validators.** The receipt shows at least 2 of 3 validators agreed.
+5. **Record.** Open the Blockscout link. The transaction calls `storeCommitment` on `Veya.sol`. `veya_verify_commitment_onchain` or `veya_commitment_exists` with the receipt's commitment returns `exists: true`.
+6. **Idempotency.** Calling `veya_paid_call` again with the same `idempotencyKey` returns the same `runId` with `replay: true` and no new Solana transaction.
+
+| Check | Pass |
+|-------|------|
+| Blocked call | `decision: "blocked"`, a deny code, no `payment` field |
+| Allowed call | `state: "committed"`, all three statuses `true` |
+| Payment | Solscan: finalized, amount, mint, payee match the quote |
+| Record | Blockscout: `storeCommitment` succeeded; commitment exists on chain |
+| Replay | Same `runId`, `replay: true`, no new payment |
