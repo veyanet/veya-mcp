@@ -1,3 +1,4 @@
+import { publicReplacer } from "../publicJson.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { MCP_SERVICE_NAME, MCP_SERVICE_VERSION, type McpServiceConfig } from "../config.js";
@@ -20,7 +21,6 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
               publicUrl: cfg.publicMcpUrl,
               settlement: {
                 network: cfg.network === "mainnet" ? "Robinhood Chain mainnet" : "Robinhood Chain testnet",
-                chainId: cfg.chainId,
                 contract: cfg.contractAddress,
                 explorer: cfg.explorerUrl,
                 rpc: cfg.rpcUrl,
@@ -38,7 +38,7 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
                 "Consensus and sealed capacity are provided by the product API (api.veyanet.tech).",
               publicPasteUrl: "https://mcp.veyanet.tech/mcp",
             },
-            null,
+            publicReplacer,
             2,
           ),
         },
@@ -60,11 +60,9 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
             text: JSON.stringify(
               {
                 ...ping,
-                chainId: ping.chainId.toString(),
-                expectedChainId: cfg.chainId,
                 config: publicClientConfig(client.describe() as Record<string, unknown>),
               },
-              null,
+              publicReplacer,
               2,
             ),
           },
@@ -119,7 +117,7 @@ export async function verifyTransactionTool(
 ) {
   const text = (v: unknown, isError = false) => ({
     ...(isError ? { isError: true } : {}),
-    content: [{ type: "text" as const, text: JSON.stringify(v, null, 2) }],
+    content: [{ type: "text" as const, text: JSON.stringify(v, publicReplacer, 2) }],
   });
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash.trim())) {
     return text({ ok: false, code: "INVALID_TX_HASH", message: "txHash must be 0x followed by 64 hex characters." }, true);
