@@ -138,9 +138,9 @@ Keep a custom pin aligned with RPC, explorer, and contract. SDK write paths call
 
 | Surface | Uses |
 |---------|------|
-| `GET /health` | `cfg.chainId`, `cfg.contractAddress` |
+| `GET /health` | `cfg.network`, `cfg.contractAddress` (chain ID not shown) |
 | `veya_describe` | Full settlement object from config |
-| `veya_ping_chain` | SDK ping + `expectedChainId: cfg.chainId` |
+| `veya_ping_chain` | SDK ping (block, contract); chain ID checked internally, not shown |
 | Write tools | `createWriteClient` → `EvmAnchor` + chain-id guard |
 | Explorer URLs in write results | `client.explorerFor(txHash)` |
 
