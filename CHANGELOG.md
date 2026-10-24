@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.2.9] — 2026-10-25
+
+### Added
+- **Paid Call Guard** (opt-in, `VEYA_PAID_CALLS=1`). Three tools: `veya_paid_discover` (read-only quote and policy preview), `veya_paid_call` (one guarded call) and `veya_paid_run` (read or resume a run; never pays). An agent calls an x402 resource under a fixed VEYA policy: tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold and input are checked before anything is signed. Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
+- Two payer paths, chosen per provider or resource in `config/paid-calls.json`: `xpay-sdk` (xPay SDK `use()` with its guardrails) and `x402-exact` (standard x402 `exact` client).
+- Evidence: the Solana payment is verified at `finalized` (payer, payee, mint, amount), 3 validator nodes on separate RPC providers sign the evidence with ML-DSA-44 (2 of 3 must agree), and a commitment is anchored on `Veya.sol` with `storeCommitment`.
+- Receipt route `GET /receipts/paid/:runId` (HTML) and `/receipts/paid/:runId.json`. Public fields only, with no request input or answer.
+- Kill switch: `"enabled": false` in config, `VEYA_PAID_CALLS_DISABLED=1`, or a `DISABLED` file in the state folder.
+- Idempotency keys, a run state machine, budget reservation for parallel calls and a process-wide ledger lock (`STATE_LOCKED`).
+- `node dist/cli.js --stdio` serves the tools over stdio for a single local client.
+
+### Changed
+- The chain ID is no longer included in public output: `/health`, `/healthz`, `veya_describe`, `veya_ping_chain`, proof and seal-decision replies, and proxied product API replies. Chain validation still runs inside the SDK and fails closed on a mismatch.
+- Service version, health `version` and `veya_describe` report **1.2.9**. Depends on `@veyanet/sdk` 1.2.9. Publish the SDK first.
+
+### Fixed
+- Docs: pinned versions, native-unit note for `Veya.sol` spend values, kill-switch reply, Mainnet contract and explorer link in VERIFICATION.md, and health field tables.
+
+### Unchanged
+- Without `VEYA_PAID_CALLS=1` the server lists the same 51 tools and routes as before (54 with it on). No contract change.
+
 ## [1.2.8] — 2026-10-17
 
 ### Fixed (launch)
