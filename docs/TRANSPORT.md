@@ -36,6 +36,8 @@ That means:
 
 Package used for the protocol: `@modelcontextprotocol/sdk` (`StreamableHTTPServerTransport`, `McpServer`).
 
+For a single local client, `node dist/cli.js --stdio` serves the same tools over **stdio** (`StdioServerTransport`). Logs go to stderr so stdout carries only JSON-RPC. The public product path stays Streamable HTTP.
+
 ---
 
 ## 2. Public connector
@@ -63,9 +65,10 @@ Related URLs:
 | Method | Path | Auth | Role |
 |--------|------|------|------|
 | `GET` | `/` | None | Landing HTML. Always tells humans to paste `https://mcp.veyanet.tech/mcp`. |
-| `GET` | `/health` | None | service info (version, chain id, writes flag, sealed claim). |
+| `GET` | `/health` | None | service info (version, network, writes flag, sealed claim). |
 | `POST` | `/mcp` | None (keys are tool args) | **Primary** Streamable HTTP. Stateless. |
 | `POST` | `/mcp/session` | None | Optional session-id transport map. |
+| `GET` | `/receipts/paid/:runId` | None | Only when `VEYA_PAID_CALLS=1`. Paid Call Guard receipt (HTML). `…/:runId.json` returns the public fields. See [PAID_CALLS.md](./PAID_CALLS.md#7-receipts). |
 
 Public paste URL is `https://mcp.veyanet.tech/mcp`.
 
@@ -124,9 +127,9 @@ Shape (fields from code):
 |-------|---------|
 | `status` | `"ok"` if the MCP process is up (not a fleet check) |
 | `service` | `@veyanet/mcp` |
-| `version` | `1.2.8` (from `MCP_SERVICE_VERSION`) |
+| `version` | `1.2.9` (from `MCP_SERVICE_VERSION`) |
 | `publicMcpUrl` | From `PUBLIC_MCP_URL` env |
-| `chainId` | Configured pin |
+| `network` | `mainnet` or `testnet` |
 | `contractAddress` | `Veya.sol` |
 | `writesEnabled` | `true` (own-wallet write tools registered) |
 | `operatorRelayerWrites` | `false` (own-wallet writes never use the host relayer) |
