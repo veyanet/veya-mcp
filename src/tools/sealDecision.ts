@@ -1,3 +1,4 @@
+import { publicReplacer } from "../publicJson.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { sealDecision, type SealDecisionResult } from "@veyanet/sdk";
@@ -117,7 +118,7 @@ function toolResult(raw: SealDecisionResult) {
   const proof = normalizeSealProof(raw);
   return {
     isError: !proof.ok,
-    content: [{ type: "text" as const, text: JSON.stringify(proof, null, 2) }],
+    content: [{ type: "text" as const, text: JSON.stringify(proof, publicReplacer, 2) }],
   };
 }
 
