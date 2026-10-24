@@ -31,6 +31,7 @@ You need **public MCP**, optionally **`@veyanet/sdk`**, and the **product API** 
 | Self-host env vars | [CONFIGURATION.md](./CONFIGURATION.md) |
 | Put TLS in front of Node | [DEPLOYMENT.md](./DEPLOYMENT.md) |
 | Prove it as an auditor | [VERIFICATION.md](./VERIFICATION.md) |
+| Run paid x402 calls under a VEYA policy (opt-in, operators) | [PAID_CALLS.md](./PAID_CALLS.md) |
 | See what is SDK vs API | [SDK_BRIDGE.md](./SDK_BRIDGE.md) |
 | Contribute a tool | [../CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Report a security bug | [../SECURITY.md](../SECURITY.md) |
@@ -52,8 +53,8 @@ flowchart TB
 
 | Item | Value |
 |------|-------|
-| npm | `@veyanet/mcp` **1.2.8** |
-| SDK | `@veyanet/sdk` **^1.2.8** |
+| npm | `@veyanet/mcp` **1.2.9** |
+| SDK | `@veyanet/sdk` **^1.2.9** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Product API | `https://api.veyanet.tech` |
 | Default profile | Mainnet |
