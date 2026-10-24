@@ -42,6 +42,7 @@ npm package: `@veyanet/mcp`. Public host: `https://mcp.veyanet.tech/mcp`.
 | `VEYA_PAYER_PRIVATE_KEY` | Self-hosted env / secret manager (preferred) |
 | `payerPrivateKey` tool arg | Caller custody — testnet only; prefer env |
 | ML-DSA private keys from `veya_pq_keygen` | Caller custody — not logs, not git |
+| Paid Call Guard key files (`VEYA_PAID_SOLANA_KEY_PATH`, `VEYA_PAID_ANCHOR_KEY_PATH`) | Files on the host, mode `0600`, outside the repo. Only paths in env; never tool arguments |
 
 `.env.example` is the only environment template that belongs in git. It must not contain real keys.
 
@@ -120,3 +121,4 @@ Acknowledgment target: **72 hours**. Coordinated disclosure before public detail
 - Keep `PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp` so humans are never told to paste a private bind
 - JSON body cap is 1 MB — keep proxy limits aligned; rate-limit `/mcp` at the edge
 - Prefer self-host for `VEYA_PAYER_PRIVATE_KEY` instead of sending a private key to the public URL
+- Paid Call Guard (if enabled): keep the payer wallet funded only for its budget, keep the anchor wallet separate from the relayer, and use `VEYA_PAID_CALLS_DISABLED=1` or `state/DISABLED` as the kill switch. See [docs/PAID_CALLS.md](./docs/PAID_CALLS.md)
