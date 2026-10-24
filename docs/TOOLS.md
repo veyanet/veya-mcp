@@ -27,8 +27,9 @@ Chain tools use the server profile. The default is **Mainnet**. `ROBINHOOD_NETWO
 7. [4. Public registry and on-chain reads](#4-public-registry-and-on-chain-reads)
 8. [5. Product API (apiKey)](#5-product-api-apikey)
 9. [6. On-chain write tools (your wallet)](#6-on-chain-write-tools-your-wallet)
-10. [Live facts](#live-facts)
-11. [Index of tool names](#index-of-tool-names)
+10. [7. Paid Call Guard (opt-in)](#7-paid-call-guard-opt-in)
+11. [Live facts](#live-facts)
+12. [Index of tool names](#index-of-tool-names)
 
 ---
 
@@ -55,7 +56,7 @@ If validators or sealed-node are down, consensus/sealed tools return a clear err
 
 `veya_writes_status` is always registered. It explains own-wallet writes. On Mainnet an empty wallet says `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` On Testnet it says `You don't have testnet tokens. Please get them for the transaction.`
 
-**51 tools** (writes always listed).
+**51 tools** (writes always listed). **54 tools** when the opt-in Paid Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-paid-call-guard-opt-in).
 
 ---
 
@@ -126,7 +127,7 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 ## `veya_describe`
 
-**What it does.** Returns a JSON service info from config: package name and version, public paste URL, the selected network: Mainnet (default) or Testnet, with chain id, contract, RPC and explorer, product API URL, sealed = AES-256-GCM, how writes work, and that fleet is API-owned. Use `veya_ping_chain` for a live RPC check.
+**What it does.** Returns a JSON service info from config: package name and version, public paste URL, the selected network: Mainnet (default) or Testnet, with contract, RPC and explorer, product API URL, sealed = AES-256-GCM, how writes work, and that fleet is API-owned. Use `veya_ping_chain` for a live RPC check.
 
 **When to use it.** First call after connecting. Diligence. “What is this MCP?”
 
@@ -138,13 +139,13 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 ## `veya_ping_chain`
 
-**What it does.** Asks Robinhood Chain JSON-RPC if it is reachable, what chain id it is, and a bit of block/contract context, using `@veyanet/sdk` `VeyaClient.pingChain()`.
+**What it does.** Asks Robinhood Chain JSON-RPC if it is reachable, and a bit of block/contract context, using `@veyanet/sdk` `VeyaClient.pingChain()`.
 
 **When to use it.** After describe. If this fails, later verify/write will fail too.
 
 **Arguments.** None.
 
-**What you get back.** Ping fields plus `chainId` as a string, `expectedChainId` from config, and `config` from `client.describe()`. This tree's default is Mainnet. Testnet is the profile when `ROBINHOOD_NETWORK=testnet`.
+**What you get back.** Ping fields (block and contract context) and `config` from `client.describe()`. The chain ID is checked internally and is not included. This tree's default is Mainnet. Testnet is the profile when `ROBINHOOD_NETWORK=testnet`.
 
 ---
 
@@ -170,7 +171,7 @@ With `anchor` true, the call also needs `apiKey`, `environmentId` for an environ
 | `environmentId` | string | yes when `anchor` is true |
 | `payerPrivateKey` | string | yes when `anchor` is true |
 
-**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `chainId`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. A receipt with no VEYA log and a receipt that called a different contract both return that full object. The second one sets `refusal` to `transaction did not target Veya.sol — not a VEYA proof`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
+**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. A receipt with no VEYA log and a receipt that called a different contract both return that full object. The second one sets `refusal` to `transaction did not target Veya.sol — not a VEYA proof`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
 
 ---
 
@@ -677,6 +678,42 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 ---
 
 
+# 7. Paid Call Guard (opt-in)
+
+**Auth: host level.** The MCP bearer token, when the host sets `MCP_API_KEY`. These three tools exist only when the operator sets `VEYA_PAID_CALLS=1`. The host pays from its own configured Solana payer; the agent never sees a key. Full guide: [PAID_CALLS.md](./PAID_CALLS.md).
+
+## `veya_paid_discover`
+
+**What it does.** Lists the paid resources the host policy allows, with each resource's input fields, payer path, a live unpaid x402 quote and a policy preview. Never pays.
+
+**When to use it.** Before `veya_paid_call`, to pick a `resourceId` and see which `input` fields it takes.
+
+**Arguments.** None.
+
+**What you get back.** `{ disabled, resources: [{ id, provider, payer, description, input, quote, policyPreview }] }`. `policyPreview` is `{ allow: true, callCostAtomic }` or `{ allow: false, code, reason }`.
+
+## `veya_paid_call`
+
+**What it does.** Runs one paid x402 call through the VEYA policy gate. Checks tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold and input **before** anything is signed. Then pays the approved requirement once, verifies the Solana payment at `finalized`, gets 2-of-3 validator signatures and anchors a commitment on Robinhood Chain.
+
+**When to use it.** Your agent needs a paid resource and you want a policy check and a verifiable record of the call.
+
+**Arguments.** `taskId`, `idempotencyKey` (8–120 chars; use a new random value such as a UUID per call, and reuse it only to retry), `input` (object of strings), optional `resourceId`, `taskBudgetAtomic`, `url` (gate testing only).
+
+**What you get back.** `runId`, `decision`, `state`, `reason`, `statuses { responseReceived, paymentVerified, veyaRecordAnchored }`, `payment { signature, solscan, feeSignature }`, `veya { commitment, tx, blockscout }`, `receipt`, `output`. The same `idempotencyKey` again returns the stored run with `replay: true` and never pays twice.
+
+## `veya_paid_run`
+
+**What it does.** Reads a run. With `resume: true` it retries Solana verification or anchoring for a pending run, or looks for an on-chain payment after a resource error. Never pays.
+
+**When to use it.** A call ended in `payment_unverifiable`, `commit_failed` or `resource_error`, or you want the proof links again.
+
+**Arguments.** `runId`, optional `resume`.
+
+**What you get back.** The same shape as `veya_paid_call` (without `output`).
+
+---
+
 # Live facts
 
 | Claim | Live value |
@@ -743,6 +780,9 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_register_environment` | Writes | Key + payer |
 | `veya_register_pq_onchain` | Writes | Key + payer |
 | `veya_anchor_pq_attestation` | Writes | Key + payer |
+| `veya_paid_discover` | Paid Call Guard (opt-in) | Host level |
+| `veya_paid_call` | Paid Call Guard (opt-in) | Host level |
+| `veya_paid_run` | Paid Call Guard (opt-in) | Host level |
 
 ## Related
 
@@ -751,4 +791,5 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what is SDK vs API
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [QUICKSTART.md](./QUICKSTART.md) — first five minutes  
+- [PAID_CALLS.md](./PAID_CALLS.md) — opt-in Paid Call Guard
 - [TRANSPORT.md](./TRANSPORT.md) — tool policy is saved on the account
