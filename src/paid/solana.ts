@@ -43,3 +43,9 @@ export async function recentSignatures(rpc: string, address: string, limit = 5, 
   const r = (await rpcCall(rpc, "getSignaturesForAddress", [address, { limit, commitment: "confirmed" }], fetchImpl, 15000)) as { signature: string }[];
   return r.map((x) => x.signature);
 }
+
+/** Caller's USDC (mint) balance in atomic units at `confirmed`, summed over token accounts. Read-only; used to refuse before signing. */
+export async function tokenBalance(rpc: string, owner: string, mint: string, fetchImpl: typeof fetch = fetch): Promise<bigint> {
+  const r = (await rpcCall(rpc, "getTokenAccountsByOwner", [owner, { mint }, { encoding: "jsonParsed", commitment: "confirmed" }], fetchImpl, 15000)) as { value: { account: { data: { parsed: { info: { tokenAmount: { amount: string } } } } } }[] };
+  return r.value.reduce((s, a) => s + BigInt(a.account.data.parsed.info.tokenAmount.amount), 0n);
+}
