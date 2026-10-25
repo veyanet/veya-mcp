@@ -4,7 +4,7 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.2.9`
+**npm:** `@veyanet/mcp@1.2.11`
 
 Public users only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 
@@ -258,8 +258,11 @@ Related: [NETWORK_PIN.md](./NETWORK_PIN.md), [QUICKSTART.md](./QUICKSTART.md).
 Off unless `VEYA_PAID_CALLS=1`. When on:
 
 - The state folder (`VEYA_PAID_STATE_DIR`) must be on a persistent disk, writable by the MCP process. It holds the run ledger, the audit log, `ledger.lock` and the optional `DISABLED` flag. Run one MCP process per state folder; do not scale the paid tools across several processes that share one folder.
-- The Solana payer key and the anchor key are files (mode `0600`) outside the repo; only their paths go in env.
 - Three validator nodes must be reachable from the MCP (`VEYA_PAID_VALIDATOR_NODES`). Do not expose validator nodes publicly.
+- Set `VEYA_API_URL` to the VEYA API. It checks each caller's `apiKey` and stores runs; the API must include `/v1/paid-runs` (apply the backend Prisma schema with its `db:push` script after upgrading).
+- Callers pay with their own keys (`solanaPrivateKey`, `robinhoodPrivateKey`); the server holds no wallet for paid calls.
+- The policy config ships in the package (`config/paid-calls.json`); no extra file is needed.
+- `/health` reports `paidCallGuard` (enabled, kill switch, tools, `requires`, who pays, where runs are saved). It never shows keys or paths.
 - Expose `/mcp` and `/receipts/paid/*` through the reverse proxy.
 - Set `VEYA_PAID_RECEIPTS_BASE_URL` to the public receipt base.
 - Rollback: set `VEYA_PAID_CALLS_DISABLED=1`, or unset `VEYA_PAID_CALLS`, and restart. No contract change is involved.
