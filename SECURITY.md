@@ -42,7 +42,7 @@ npm package: `@veyanet/mcp`. Public host: `https://mcp.veyanet.tech/mcp`.
 | `VEYA_PAYER_PRIVATE_KEY` | Self-hosted env / secret manager (preferred) |
 | `payerPrivateKey` tool arg | Caller custody — testnet only; prefer env |
 | ML-DSA private keys from `veya_pq_keygen` | Caller custody — not logs, not git |
-| Paid Call Guard key files (`VEYA_PAID_SOLANA_KEY_PATH`, `VEYA_PAID_ANCHOR_KEY_PATH`) | Files on the host, mode `0600`, outside the repo. Only paths in env; never tool arguments |
+| Caller keys on `veya_paid_call` (`solanaPrivateKey`, `robinhoodPrivateKey`) and `apiKey` | Tool arguments for one call. Used in memory only, never stored, logged, written to state, receipts or the account record, or returned; Solana key bytes cleared after the call. Callers should use dedicated wallets with small balances |
 
 `.env.example` is the only environment template that belongs in git. It must not contain real keys.
 
