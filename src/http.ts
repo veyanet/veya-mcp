@@ -15,6 +15,7 @@ import {
 import { createMcpServer } from "./server.js";
 import { registeredToolCount, renderMcpInfoHtml, renderMcpRootHtml, wantsHtml } from "./mcpInfoPage.js";
 import { mountPaidReceipts } from "./paid/receiptRoutes.js";
+import { paidCallsStatus, sharedGuard } from "./paid/tools.js";
 import { LOGO_PNG, LOGO_MARK_LIGHT_PNG } from "./brandAssets.js";
 
 export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
@@ -45,6 +46,7 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
       writesEnabled: true,
       operatorRelayerWrites: operatorRelayerWritesEnabled(cfg),
       sealed: "AES-256-GCM",
+      paidCallGuard: paidCallsStatus(),
       settlement: cfg.network === "mainnet"
         ? "Robinhood Chain mainnet"
         : "Robinhood Chain testnet",
@@ -189,6 +191,14 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
 }
 
 export function startHttpServer(cfg: McpServiceConfig = loadConfig()) {
+  // Fail fast: a paid-call misconfiguration (missing validators, locked state folder) must stop the
+  // process at boot, not answer every MCP session with a generic 500 while /health looks fine.
+  if (process.env.VEYA_PAID_CALLS === "1") {
+    try { sharedGuard(); } catch (e) {
+      console.error(`[veyanet/mcp] Paid Call Guard could not start: ${(e as Error).message}`);
+      process.exit(1);
+    }
+  }
   const app = createHttpApp(cfg);
   return app.listen(cfg.port, cfg.host, () => {
     console.log(`[veyanet/mcp] listening on http://${cfg.host}:${cfg.port}`);
