@@ -6,7 +6,7 @@
   **The official Model Context Protocol server for post-quantum agent tools, chain verification, sealed-execution service info, and protocol settlement on Robinhood Chain.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.9-cb3837.svg?style=flat-edge)](./package.json)
+  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.11-cb3837.svg?style=flat-edge)](./package.json)
   [![Node Version](https://img.shields.io/badge/Node-%3E%3D20-green.svg?style=flat-edge)](https://nodejs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-edge)](https://www.typescriptlang.org/)
   [![MCP Endpoint](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9.svg?style=flat-edge)](https://mcp.veyanet.tech/mcp)
@@ -203,7 +203,7 @@ app.listen(cfg.port, cfg.host);
 | `VEYA_API_URL` | Product API (health, registry, sessions, fleet capacity) | `https://api.veyanet.tech` |
 | `CORS_ORIGIN` | Comma-separated Origin allowlist | empty = reject credentialed browser Origin |
 | `NODE_ENV` | Runtime mode | `development` |
-| `VEYA_PAID_CALLS` | `1` enables the opt-in Paid Call Guard (3 more tools). Its other `VEYA_PAID_*` settings are in [docs/CONFIGURATION.md](./docs/CONFIGURATION.md#11-paid-call-guard) | off |
+| `VEYA_PAID_CALLS` | `1` enables Paid Call Guard (3 more tools; callers pay from their own wallet). Its other `VEYA_PAID_*` settings are in [docs/CONFIGURATION.md](./docs/CONFIGURATION.md#11-paid-call-guard) | off |
 
 Host-only settings (fleet URLs and host signing keys) are covered in the operator guide, [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md). Public users never set them.
 
@@ -243,7 +243,7 @@ https://mcp.veyanet.tech/mcp
 
 ## 🧩 Core Tools Overview
 
-`@veyanet/mcp` **1.2.9** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
+`@veyanet/mcp` **1.2.11** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
 
 ### 0. Proof
 
@@ -346,14 +346,42 @@ Writes go through SDK `EvmAnchor`, which calls `ensureRobinhoodChain()` before s
 
 ---
 
-### 6. Paid Call Guard (opt-in)
+### 6. Paid Call Guard
 
 ```text
 Tools: veya_paid_discover, veya_paid_call, veya_paid_run
-Enabled by: VEYA_PAID_CALLS=1 on a host you run
+On the hosted URL: yes (check paidCallGuard in /health or veya_describe)
+Needs: your VEYA apiKey + your own Solana key (pays USDC) + your own Robinhood Chain key (signs the record, pays gas)
+Runs: saved to your VEYA account; veya_paid_run is private to that account
+Receipts: public proof links (no keys, apiKey or input)
+Kill switch: operator-only; callers cannot change it
 ```
 
-An agent calls a paid x402 resource through one guarded tool. VEYA checks the call against a fixed policy before anything is signed, pays exactly the approved quote, verifies the payment on Solana at `finalized`, gets 2-of-3 validator signatures and anchors a commitment on `Veya.sol`. The default tool list (51 tools) does not change unless the host enables it (54 tools). Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
+An agent calls a paid x402 resource through one guarded tool. VEYA checks the call against a fixed policy before anything is signed, checks your API key and both wallet balances, pays exactly the approved quote from **your** Solana wallet, verifies the payment on Solana at `finalized`, gets 2-of-3 validator signatures, anchors a commitment on `Veya.sol` from **your** Robinhood Chain address and saves the run to your VEYA account. A blocked call is never signed and moves no money. The same `idempotencyKey` never pays twice. Every run gets a receipt at `/receipts/paid/<runId>`. Receipt links are public: anyone with the link can read the proof, and a receipt never holds keys, your `apiKey` or your input. Every refusal returns `decision: "blocked"`, a stable `code` and `payment: null`. `veya_paid_discover` shows the per-call cap, the task budget maximum (0.04 USDC) and default, and for each resource the provider quote and the total charged to your task budget. See [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
+
+Try it from any MCP client connected to `https://mcp.veyanet.tech/mcp`:
+
+1. `veya_paid_discover` to see allowed resources, input fields and a live quote.
+2. `veya_paid_call` with `taskId`, a new `idempotencyKey`, `resourceId`, `input`, your `apiKey`, your Solana secret key in `solanaPrivateKey` and your Robinhood Chain key in `robinhoodPrivateKey`.
+3. Open the Solscan, Blockscout and receipt links in the reply.
+4. `veya_paid_run` with your `apiKey` lists the runs saved to your account.
+
+```json
+{
+  "name": "veya_paid_call",
+  "arguments": {
+    "taskId": "task-1",
+    "idempotencyKey": "<new uuid>",
+    "resourceId": "tokens.asset-risk-summary",
+    "input": { "assetId": "solana" },
+    "apiKey": "<your VEYA API key>",
+    "solanaPrivateKey": "<your Solana secret key>",
+    "robinhoodPrivateKey": "<your Robinhood Chain key>"
+  }
+}
+```
+
+Keys are used in memory for that one call and never stored, logged or returned. Use dedicated wallets: a little USDC and SOL on Solana, a little ETH on Robinhood Chain. A missing value returns `API_KEY_REQUIRED`, `SOLANA_KEY_REQUIRED` or `ROBINHOOD_KEY_REQUIRED` and nothing happens. Servers without `VEYA_PAID_CALLS=1` list 51 tools; with it, 54. Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
 
 ---
 
