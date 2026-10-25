@@ -4,7 +4,7 @@
 
 This document explains how the MCP server is built, who talks to whom, and what a tool call actually does. Words stay simple. Details stay real.
 
-[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.9-cb3837?style=flat-edge)](../package.json)
+[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.11-cb3837?style=flat-edge)](../package.json)
 [![Robinhood Mainnet](https://img.shields.io/badge/Robinhood%20Chain-Mainnet-blue?style=flat-edge)](https://robinhoodchain.blockscout.com/address/0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674)
 [![Public MCP](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9?style=flat-edge)](https://mcp.veyanet.tech/mcp)
 
@@ -70,7 +70,7 @@ Live product facts:
 
 | Field | Value |
 |-------|-------|
-| npm package | `@veyanet/mcp` **1.2.9** |
+| npm package | `@veyanet/mcp` **1.2.11** |
 | SDK it depends on | `@veyanet/sdk` **^1.2.9** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Landing | `https://mcp.veyanet.tech/` |
@@ -375,7 +375,7 @@ flowchart TB
 | Product | `apiKey` argument | Product `/auth`, `/v1`, `/api/verify` |
 | Writes | `apiKey` + user payer | SDK `EvmAnchor` from the user's wallet |
 
-**51 tools**. Own-wallet writes are always listed. **54** with the opt-in Paid Call Guard (`VEYA_PAID_CALLS=1`, [section 18](#18-paid-call-guard)).
+**51 tools**. Own-wallet writes are always listed. **54** with Paid Call Guard on (`VEYA_PAID_CALLS=1`, [section 18](#18-paid-call-guard)).
 
 ---
 
@@ -562,14 +562,16 @@ These must stay true in code and docs:
 
 ## 18. Paid Call Guard
 
-Opt-in (`VEYA_PAID_CALLS=1`). Adds three tools (`veya_paid_discover`, `veya_paid_call`, `veya_paid_run`) and the read-only route `/receipts/paid/:runId`. Code: `src/paid/`. Guide: [PAID_CALLS.md](./PAID_CALLS.md).
+Enabled per server with `VEYA_PAID_CALLS=1` (on at the hosted URL). Adds three tools (`veya_paid_discover`, `veya_paid_call`, `veya_paid_run`) and the read-only route `/receipts/paid/:runId`. Code: `src/paid/`. Guide: [PAID_CALLS.md](./PAID_CALLS.md).
 
 ```mermaid
 flowchart LR
-  T["veya_paid_call"] --> G["Policy gate<br/>policy.ts"]
+  T["veya_paid_call"] --> K["apiKey -> VEYA account<br/>parse both keys"]
+  K --> G["Policy gate<br/>policy.ts"]
   G -->|deny| D["denied (nothing signed)"]
   G --> Q["Unpaid 402 quote<br/>must equal pin"]
-  Q --> P["Payer path<br/>payer.ts"]
+  Q --> F["ETH for gas + USDC balance<br/>anchor.ts / pipeline.ts"]
+  F --> P["Payer path<br/>payer.ts"]
   P -->|xpay-sdk| X["xPay SDK use()<br/>guardrails + VEYA pin"]
   P -->|x402-exact| E["@x402 exact client<br/>approved option only"]
   X --> S["Solana check at finalized<br/>solana.ts"]
@@ -577,26 +579,30 @@ flowchart LR
   S --> V["3 validators, 2 of 3<br/>validators.ts"]
   V --> A["storeCommitment<br/>anchor.ts"]
   A --> R["Receipt<br/>receipt.ts"]
+  R --> U["Saved to the caller's<br/>VEYA account (/v1/paid-runs)"]
 ```
 
 | Module | Role |
 |--------|------|
 | `config.ts` | Loads the config file; checks providers, payer paths, validator count, independent RPC providers, `finalized`. |
 | `policy.ts` | Pure policy gate, unpaid quote probe, strict input check. |
+| `payerKey.ts` | Parses the caller's `solanaPrivateKey` (base58 or 64-number JSON array) in memory and derives the public address. Never stores or echoes the key. |
+| `robinhoodKey.ts` | Parses the caller's `robinhoodPrivateKey` (32-byte hex) and derives the address. Never echoes the key. |
 | `payer.ts` | The only module that imports a payer library. `use()` on the xPay SDK, or the standard x402 `exact` client. No transfer, swap, trade or `do()`. |
 | `state.ts` | Ledger: run state machine, idempotency, budget reservations, audit log. |
 | `solana.ts` | Reads the payment at `finalized` and checks payer, payee, mint and amount. |
 | `validators.ts` | Sends evidence to three nodes, each with its own Solana RPC; checks ML-DSA-44 signatures; needs 2 of 3. |
-| `anchor.ts` | Simulates, then sends `storeCommitment(bytes16,bytes32)`; never re-sends an existing commitment. |
+| `anchor.ts` | Pre-checks the environment and the caller's ETH for gas, simulates, then sends `storeCommitment(bytes16,bytes32)` from the caller's key; never re-sends an existing commitment. |
 | `receipt.ts`, `receiptRoutes.ts` | HTML and JSON receipts with public fields only. |
 | `pipeline.ts` | `PaidCallGuard`: ties the steps together; `resume` and `reconcile` never pay. |
-| `tools.ts` | Registers the three tools. |
+| `tools.ts` | Registers the three tools; checks `apiKey` against the VEYA API and saves each run to the caller's account (`/v1/paid-runs`). |
 
 Trust notes:
 
-- The agent never holds a key. The Solana payer key and the anchor key are files on the host, read by path.
+- The caller pays from their own Solana wallet (`solanaPrivateKey`) and records from their own Robinhood Chain wallet (`robinhoodPrivateKey`). Keys are used in memory for one call; only the public addresses are kept as evidence.
+- Idempotency keys, task budgets and run reads are scoped to the caller's VEYA account.
 - Money moves in one step only, after the gate, and is never retried automatically.
-- The anchor wallet is separate from the product relayer, so no other tool gains write power.
+- Paid calls never use the product relayer, so no other tool gains write power.
 
 ## Related docs
 
