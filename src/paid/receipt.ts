@@ -5,6 +5,18 @@ import type { RunRecord } from "./state.js";
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const yes = (b: boolean) => (b ? `<span class="ok">yes</span>` : `<span class="no">no</span>`);
 
+/** Last note in the run history, e.g. "before signing: PAYER_NOT_CONFIGURED ...". Never holds keys. */
+export const lastReason = (r: RunRecord) => r.history[r.history.length - 1]?.note;
+
+/** Footer text matches what actually happened in the run. Only a committed run is called cross-chain evidence. */
+function footer(r: RunRecord): string {
+  const p = (t: string) => `<p class="sub" style="margin-top:20px">${t}</p>`;
+  if (!(r.decision as any)?.allow) return p("VEYA policy stopped this call before anything was signed. No payment was made.");
+  if (r.state === "committed") return p("This is cross-chain evidence: the payment settles on Solana and VEYA anchors a commitment on Robinhood Chain afterwards. It is not one atomic cross-chain transaction, and it does not prove the resource's answer is correct.");
+  if (r.state === "payment_failed") return p(`The policy allowed this call, but the payment did not go through, so nothing was paid and nothing was recorded on Robinhood Chain. Reason: ${esc(lastReason(r))}`);
+  return p(`This run is not complete (state: ${esc(r.state)}), so it is not cross-chain evidence yet. Reason: ${esc(lastReason(r))}`);
+}
+
 /** Static receipt page (light VEYA theme). Holds hashes and links only, never the prompt or full output. */
 export function renderReceiptHtml(r: RunRecord): string {
   const e = r.evidence as Record<string, any>;
@@ -19,6 +31,7 @@ code{font-size:12px;word-break:break-all}.ok{color:#047857;font-weight:600}.no{c
 <table>
 <tr><td>Run</td><td><code>${esc(r.runId)}</code></td></tr>
 <tr><td>Final state</td><td><span class="badge">${esc(r.state)}</span></td></tr>
+<tr><td>Payer wallet</td><td>${val(e.payerAddress)}</td></tr>
 <tr><td>Policy decision</td><td>${esc((r.decision as any)?.allow ? "allowed" : `blocked: ${(r.decision as any)?.code ?? ""}`)}</td></tr>
 <tr><td>Resource</td><td>${esc(r.resourceId)}</td></tr>
 <tr><td>Response received</td><td>${yes(r.statuses.responseReceived)}</td></tr>
@@ -26,12 +39,12 @@ code{font-size:12px;word-break:break-all}.ok{color:#047857;font-weight:600}.no{c
 <tr><td>VEYA record anchored</td><td>${yes(r.statuses.veyaRecordAnchored)}</td></tr>
 <tr><td>Payment</td><td>${link(e.solscanUrl, e.paymentSig)}</td></tr>
 <tr><td>Payer path</td><td>${esc(e.payer ?? "—")}</td></tr>
-<tr><td>Payer fee settlement</td><td>${link(e.feeSolscanUrl, e.feeSig)}</td></tr>
+<tr><td>Payer path settlement</td><td>${link(e.feeSolscanUrl, e.feeSig)}</td></tr>
 <tr><td>Validators</td><td>${esc(e.quorum ? `${e.quorum.agreed} of ${e.quorum.nodes.length} agreed (need ${e.quorum.threshold})` : "—")}</td></tr>
 <tr><td>Result hash (BLAKE3)</td><td>${val(e.resultHash)}</td></tr>
 <tr><td>Commitment</td><td>${val(e.commitment)}</td></tr>
 <tr><td>VEYA record</td><td>${link(e.blockscoutUrl, e.veyaTx)}</td></tr>
-</table>${(r.decision as any)?.allow ? `<p class="sub" style="margin-top:20px">This is cross-chain evidence: the payment settles on Solana and VEYA anchors a commitment on Robinhood Chain afterwards. It is not one atomic cross-chain transaction, and it does not prove the resource's answer is correct.</p>` : `<p class="sub" style="margin-top:20px">VEYA policy stopped this call before anything was signed.</p>`}</main></body></html>`;
+</table>${footer(r)}</main></body></html>`;
   return html;
 }
 
@@ -40,7 +53,8 @@ export function publicReceipt(r: RunRecord) {
   const e = r.evidence as Record<string, any>; const d = r.decision as any;
   return {
     runId: r.runId, resourceId: r.resourceId, state: r.state,
-    decision: d?.allow ? "allowed" : "blocked", reason: d?.allow ? undefined : d?.code,
+    decision: d?.allow ? "allowed" : "blocked", reason: d?.allow ? (r.state === "committed" ? undefined : lastReason(r)) : d?.code,
+    payer: e.payerAddress,
     statuses: r.statuses,
     payment: e.paymentSig ? { signature: e.paymentSig, solscan: e.solscanUrl } : undefined,
     secondSettlement: e.feeSig ? { signature: e.feeSig, solscan: e.feeSolscanUrl } : undefined,
