@@ -72,7 +72,7 @@ Type `McpServiceConfig`:
 | `corsOrigins` | CSV `CORS_ORIGIN` |
 | `nodeEnv` | `NODE_ENV` |
 
-`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.9` (read from `package.json`, not from env).
+`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.11` (read from `package.json`, not from env).
 
 ---
 
@@ -227,17 +227,16 @@ Opt-in. Nothing below is read unless `VEYA_PAID_CALLS=1`. Guide: [PAID_CALLS.md]
 | Variable | Type | Default |
 |----------|------|---------|
 | `VEYA_PAID_CALLS` | `1` to enable | off |
-| `VEYA_PAID_ROOT` | path | the package's parent folder |
-| `VEYA_PAID_CONFIG` | path | `<root>/config/paid-calls.json` |
+| `VEYA_PAID_ROOT` | path | the package's parent folder (holds `state/`, `receipts/`, optional `config/`) |
+| `VEYA_PAID_CONFIG` | path | `<root>/config/paid-calls.json` if present, else the copy shipped in the package |
 | `VEYA_PAID_STATE_DIR` | path | `<root>/state` |
 | `VEYA_PAID_RECEIPTS_DIR` | path | `<root>/receipts` |
-| `VEYA_PAID_SOLANA_KEY_PATH` | path to a Solana keypair JSON array | unset = paid calls fail closed |
-| `VEYA_PAID_ANCHOR_KEY_PATH` | path to the Robinhood Chain anchor key | unset = runs stop at `commit_failed` |
-| `VEYA_PAID_RECEIPTS_BASE_URL` | URL | unset = replies show the receipt file path |
-| `VEYA_PAID_VALIDATOR_NODES` | CSV of URLs | from the config file |
+| `VEYA_API_URL` | URL | the VEYA API; checks each `apiKey` and stores runs (`/v1/paid-runs`) |
+| `VEYA_PAID_RECEIPTS_BASE_URL` | URL | unset = replies show the relative route `/receipts/paid/<runId>` |
+| `VEYA_PAID_VALIDATOR_NODES` | CSV of URLs | from the config file (required with the shipped config) |
 | `VEYA_PAID_CALLS_DISABLED` | `1` = kill switch | off |
 
-Key files are read by path inside the server process. Never put key values in env, config or tool arguments.
+Callers bring their own keys as tool arguments (`solanaPrivateKey`, `robinhoodPrivateKey`), used in memory for that call only. The server needs no wallet for paid calls.
 
 One MCP process per state folder (`ledger.lock`). A second process on the same folder gets `STATE_LOCKED`.
 
