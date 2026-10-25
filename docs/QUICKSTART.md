@@ -193,18 +193,18 @@ More: [VERIFICATION.md](./VERIFICATION.md).
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [AUTHENTICATION.md](./AUTHENTICATION.md) — product key vs your wallet  
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — MCP vs SDK  
-- [PAID_CALLS.md](./PAID_CALLS.md) — opt-in Paid Call Guard
+- [PAID_CALLS.md](./PAID_CALLS.md) — Paid Call Guard (paid calls from your own wallet)
 
 ---
 
 ## 9. Optional: Paid Call Guard (operators)
 
-The public URL does not enable paid calls. A host that wants agents to call paid x402 resources under a VEYA policy turns it on:
+On the hosted URL, Paid Call Guard is on and callers pass their VEYA `apiKey`, their own Solana key (`solanaPrivateKey`) and their own Robinhood Chain key (`robinhoodPrivateKey`) (see [PAID_CALLS.md](./PAID_CALLS.md#9-call-it-from-an-agent)). To turn it on for a host you run:
 
-1. Build: `npm ci && npm run build`.
-2. Place the Solana payer key file and the anchor key file on the host (mode `0600`, outside the repo).
-3. Start three validator nodes.
-4. Start the server with `VEYA_PAID_CALLS=1`, `VEYA_PAID_ROOT`, `VEYA_PAID_SOLANA_KEY_PATH` and `VEYA_PAID_ANCHOR_KEY_PATH` set.
-5. From your client: `veya_paid_discover`, then a blocked call (for example `taskBudgetAtomic: "15000"`), then one allowed `veya_paid_call`.
+1. Build the MCP (`npm ci && npm run build`). The policy config ships in the package (`config/paid-calls.json`).
+2. Start three validator nodes and set `VEYA_PAID_VALIDATOR_NODES` to their URLs.
+3. Set `VEYA_API_URL` to the VEYA API (checks `apiKey`, stores runs).
+4. Start the server with `VEYA_PAID_CALLS=1` and `VEYA_PAID_ROOT` (state and receipts).
+5. From your client: `veya_paid_discover`, then a blocked call (for example `taskBudgetAtomic: "1"`), then one allowed `veya_paid_call` with your `apiKey`, `solanaPrivateKey` and `robinhoodPrivateKey`, then `veya_paid_run` with your `apiKey` to list your runs.
 
 Full steps, arguments and states: [PAID_CALLS.md](./PAID_CALLS.md).
