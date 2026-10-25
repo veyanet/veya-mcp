@@ -181,7 +181,7 @@ Only for hosts with `VEYA_PAID_CALLS=1`. See [PAID_CALLS.md](./PAID_CALLS.md).
 
 1. `tools/list` shows **54 tools**, including `veya_paid_discover`, `veya_paid_call`, `veya_paid_run`, and no transfer, swap, trade or key tool.
 2. Open the receipt: `GET /receipts/paid/<runId>` (or `.json`).
-3. **Payment.** Open the Solscan link. The transaction is finalized and moves the quoted amount of the pinned mint from the payer to the payee.
+3. **Payment.** Open the Solscan link. The transaction is finalized and moves the quoted amount of the pinned mint from the caller's wallet (the receipt's payer address) to the payee.
 4. **Validators.** The receipt shows at least 2 of 3 validators agreed.
 5. **Record.** Open the Blockscout link. The transaction calls `storeCommitment` on `Veya.sol`. `veya_verify_commitment_onchain` or `veya_commitment_exists` with the receipt's commitment returns `exists: true`.
 6. **Idempotency.** Calling `veya_paid_call` again with the same `idempotencyKey` returns the same `runId` with `replay: true` and no new Solana transaction.
@@ -189,6 +189,9 @@ Only for hosts with `VEYA_PAID_CALLS=1`. See [PAID_CALLS.md](./PAID_CALLS.md).
 | Check | Pass |
 |-------|------|
 | Blocked call | `decision: "blocked"`, a deny code, no `payment` field |
+| No `apiKey` / Solana key / Robinhood Chain key | `API_KEY_REQUIRED` / `SOLANA_KEY_REQUIRED` / `ROBINHOOD_KEY_REQUIRED`, no `runId` |
+| Saved to account | `account.saved: true`; `veya_paid_run` with your `apiKey` lists the run; another account's key reads `unknown run` |
+| Record sender | Blockscout `from` equals the address of your `robinhoodPrivateKey` (`veya.from`) |
 | Allowed call | `state: "committed"`, all three statuses `true` |
 | Payment | Solscan: finalized, amount, mint, payee match the quote |
 | Record | Blockscout: `storeCommitment` succeeded; commitment exists on chain |
