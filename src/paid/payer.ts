@@ -19,22 +19,29 @@ export interface PaidCaller { payAndCall(resource: PaidResource, req: Requiremen
 
 export class PinMismatchError extends Error {}
 
+/** Where the Solana secret comes from: a key file path (operator self-host) or an in-memory source (caller's own key). */
+export type SecretSource = string | (() => Uint8Array);
+/** Fresh copy of the 64-byte secret each time; the caller zeroes it after use. */
+export function readSecret(src: SecretSource): Uint8Array {
+  return typeof src === "string" ? Uint8Array.from(JSON.parse(readFileSync(src, "utf8")) as number[]) : Uint8Array.from(src());
+}
+
 function sameReq(a: Requirement, b: Requirement) {
   return a.network === b.network && a.asset === b.asset && a.payTo === b.payTo && a.amount === b.amount && a.scheme === b.scheme;
 }
 
 /** Picks the payer path configured for each resource (provider default or resource override). */
-export function createCaller(cfg: PaidConfig, keyPath: string, opts: { rpcUrl?: string; fetchImpl?: typeof fetch } = {}): PaidCaller {
+export function createCaller(cfg: PaidConfig, keyPath: SecretSource, opts: { rpcUrl?: string; fetchImpl?: typeof fetch } = {}): PaidCaller {
   const sdk = createXpayCaller(cfg, keyPath, opts.rpcUrl);
   const std = createX402Caller(cfg, keyPath, opts);
   return { payAndCall: (resource, req, body) => (payerKind(cfg, resource) === "x402-exact" ? std : sdk).payAndCall(resource, req, body) };
 }
 
 /** xPay SDK caller. Secret key read from a file path inside the server process only. */
-export function createXpayCaller(cfg: PaidConfig, keyPath: string, rpcUrl = cfg.solana.rpcs[0]): PaidCaller {
+export function createXpayCaller(cfg: PaidConfig, keyPath: SecretSource, rpcUrl = cfg.solana.rpcs[0]): PaidCaller {
   return {
     async payAndCall(resource, req, body) {
-      const secret = Uint8Array.from(JSON.parse(readFileSync(keyPath, "utf8")) as number[]);
+      const secret = readSecret(keyPath);
       const xpay = await buildGuardedXpay(cfg, secret, req, rpcUrl, resource);
       secret.fill(0);
       const r = await xpay.use(
@@ -99,13 +106,13 @@ export async function buildX402Payload(secret: Uint8Array, paymentRequired: Para
  * the requirement VEYA authorized, checks the signed payload still matches it, sends ONE request
  * with the payment header and reads the settlement header. No payer platform fee on this path.
  */
-export function createX402Caller(cfg: PaidConfig, keyPath: string, deps: X402Deps = {}): PaidCaller {
+export function createX402Caller(cfg: PaidConfig, keyPath: SecretSource, deps: X402Deps = {}): PaidCaller {
   const rpcUrl = deps.rpcUrl ?? cfg.solana.rpcs[0];
   const build = deps.buildPayload ?? buildX402Payload;
   return {
     async payAndCall(resource, req, body) {
       if (req.scheme !== "exact") throw new PinMismatchError(`VEYA_PIN: scheme ${req.scheme} is not exact`);
-      const secret = Uint8Array.from(JSON.parse(readFileSync(keyPath, "utf8")) as number[]);
+      const secret = readSecret(keyPath);
       let built: Awaited<ReturnType<NonNullable<X402Deps["buildPayload"]>>>;
       try {
         built = await build(secret, { x402Version: resource.x402.x402Version, resource: { url: resource.url, description: resource.description, mimeType: "application/json" }, accepts: [{ ...req, maxTimeoutSeconds: req.maxTimeoutSeconds ?? resource.x402.maxTimeoutSeconds }] }, rpcUrl);
