@@ -99,6 +99,7 @@ h2{font-size:40px;font-weight:700;letter-spacing:-1px;line-height:1.2;margin:14p
 .steps li:last-child{border:0}.steps li b{color:var(--ink)}
 .steps li::before{content:counter(s);flex-shrink:0;width:28px;height:28px;border-radius:999px;background:linear-gradient(135deg,#7C3AED,#8B5CF6);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
 .note{font-size:13px;color:var(--ink45);margin:14px 0 0;line-height:1.6}
+.ptable{width:100%;border-collapse:collapse;margin-top:12px;font-size:13.5px}.ptable th{text-align:left;color:var(--ink45);font-weight:600;padding:8px 6px;border-bottom:1px solid rgba(124,58,237,.15)}.ptable td{padding:10px 6px;vertical-align:top;border-bottom:1px solid rgba(124,58,237,.08)}.ptable code{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--accent)}
 .stack{display:grid;gap:16px}
 .faq{max-width:860px;margin:0 auto;display:grid;gap:12px}
 .faq details{background:rgba(255,255,255,.8);border:1px solid var(--line);border-radius:16px;padding:0 24px}
