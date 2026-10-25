@@ -6,9 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
-## [1.2.11] — 2026-10-25
+## [1.2.10] — 2026-10-25
 
-This release completes the Paid Call Guard introduced in 1.2.9: every run is tied to a VEYA account, the caller signs with their own Solana and Robinhood Chain keys, and every refusal now has one stable, machine-readable shape. It supersedes the unreleased 1.2.10 notes.
+This release completes the Paid Call Guard introduced in 1.2.9: every run is tied to a VEYA account, the caller signs with their own Solana and Robinhood Chain keys, and every refusal now has one stable, machine-readable shape.
 
 ### Added
 - **Account-bound runs.** `veya_paid_call` accepts `apiKey` (a VEYA product API key). The key is validated against the VEYA API before anything is signed, and every run (state, payment, validator result, Robinhood Chain record and receipt link) is saved to that account. Request input, provider answers and keys are never saved.
