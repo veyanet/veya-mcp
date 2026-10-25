@@ -27,7 +27,7 @@ Chain tools use the server profile. The default is **Mainnet**. `ROBINHOOD_NETWO
 7. [4. Public registry and on-chain reads](#4-public-registry-and-on-chain-reads)
 8. [5. Product API (apiKey)](#5-product-api-apikey)
 9. [6. On-chain write tools (your wallet)](#6-on-chain-write-tools-your-wallet)
-10. [7. Paid Call Guard (opt-in)](#7-paid-call-guard-opt-in)
+10. [7. Paid Call Guard](#7-paid-call-guard)
 11. [Live facts](#live-facts)
 12. [Index of tool names](#index-of-tool-names)
 
@@ -56,7 +56,7 @@ If validators or sealed-node are down, consensus/sealed tools return a clear err
 
 `veya_writes_status` is always registered. It explains own-wallet writes. On Mainnet an empty wallet says `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` On Testnet it says `You don't have testnet tokens. Please get them for the transaction.`
 
-**51 tools** (writes always listed). **54 tools** when the opt-in Paid Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-paid-call-guard-opt-in).
+**51 tools** (writes always listed). **54 tools** when Paid Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-paid-call-guard).
 
 ---
 
@@ -678,39 +678,41 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 ---
 
 
-# 7. Paid Call Guard (opt-in)
+# 7. Paid Call Guard
 
-**Auth: host level.** The MCP bearer token, when the host sets `MCP_API_KEY`. These three tools exist only when the operator sets `VEYA_PAID_CALLS=1`. The host pays from its own configured Solana payer; the agent never sees a key. Full guide: [PAID_CALLS.md](./PAID_CALLS.md).
+**Auth: your VEYA API key and your own wallets.** These three tools exist when the server sets `VEYA_PAID_CALLS=1` (the hosted endpoint has them on; check `paidCallGuard.enabled` in `/health` or `veya_describe`). `veya_paid_call` needs your `apiKey` (runs are saved to that account), your Solana secret key in `solanaPrivateKey` (pays the USDC) and your Robinhood Chain key in `robinhoodPrivateKey` (signs the record and pays its gas). Keys are used in memory for that call only and never stored, logged or returned. `veya_paid_run` needs your `apiKey`. `veya_paid_discover` needs no key. A host may also require its MCP bearer token (`MCP_API_KEY`). Full guide: [PAID_CALLS.md](./PAID_CALLS.md).
 
 ## `veya_paid_discover`
 
-**What it does.** Lists the paid resources the host policy allows, with each resource's input fields, payer path, a live unpaid x402 quote and a policy preview. Never pays.
+**What it does.** Lists the paid resources the host policy allows, with each resource's input fields, payer path, a live x402 quote (nothing is sent) and a policy preview. Also returns `limits` (per-call cap, largest total per call, task budget maximum and default, calls per task, all read from the policy config), `amounts` per resource (`providerQuoteAtomic`, `providerFeeAtomic`, `totalChargedAtomic` and a `note`; `tokens.risk-summary` adds the provider SDK's platform fee, so its total is twice its quote), the kill switch state, and notes on run privacy and receipts. Never pays.
 
 **When to use it.** Before `veya_paid_call`, to pick a `resourceId` and see which `input` fields it takes.
 
 **Arguments.** None.
 
-**What you get back.** `{ disabled, resources: [{ id, provider, payer, description, input, quote, policyPreview }] }`. `policyPreview` is `{ allow: true, callCostAtomic }` or `{ allow: false, code, reason }`.
+**What you get back.** `{ disabled, requires, defaultEnvironmentUuid, resources: [{ id, provider, payer, description, input, quote, policyPreview }] }`. `policyPreview` is `{ allow: true, callCostAtomic }` or `{ allow: false, code, reason }`.
 
 ## `veya_paid_call`
 
-**What it does.** Runs one paid x402 call through the VEYA policy gate. Checks tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold and input **before** anything is signed. Then pays the approved requirement once, verifies the Solana payment at `finalized`, gets 2-of-3 validator signatures and anchors a commitment on Robinhood Chain.
+**What it does.** Runs one paid x402 call through the VEYA policy gate. Checks your API key, both keys, tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold, input, the `Veya.sol` environment, your ETH for gas and your USDC balance **before** anything is signed. Then pays the approved requirement once from your Solana wallet, verifies the payment at `finalized`, gets 2-of-3 validator signatures, anchors a commitment on Robinhood Chain from your address and saves the run to your VEYA account. Every refusal returns `decision: "blocked"`, a stable `code`, a `reason` and `payment: null`. A committed run's `reason` reads `Recorded on Robinhood Chain in block N, transaction 0x…`. The kill switch is operator-only; when it is on every call returns `code: "EMERGENCY_DISABLED"`.
 
 **When to use it.** Your agent needs a paid resource and you want a policy check and a verifiable record of the call.
 
-**Arguments.** `taskId`, `idempotencyKey` (8–120 chars; use a new random value such as a UUID per call, and reuse it only to retry), `input` (object of strings), optional `resourceId`, `taskBudgetAtomic`, `url` (gate testing only).
+**Arguments.** `apiKey` (your VEYA product API key), `solanaPrivateKey` (your Solana secret key, base58 or a JSON array of 64 numbers), `robinhoodPrivateKey` (your Robinhood Chain key, `0x` + 64 hex), `taskId`, `idempotencyKey` (8–120 chars, per account; use a new random value such as a UUID per call, and reuse it only to retry), `input` (object of strings), optional `resourceId`, `taskBudgetAtomic`, `environmentUuid` (default: the one `veya_paid_discover` shows), `url` (gate testing only). No other arguments: unknown ones (including the old `payerPrivateKey`) return `INPUT_INVALID`.
 
-**What you get back.** `runId`, `decision`, `state`, `reason`, `statuses { responseReceived, paymentVerified, veyaRecordAnchored }`, `payment { signature, solscan, feeSignature }`, `veya { commitment, tx, blockscout }`, `receipt`, `output`. The same `idempotencyKey` again returns the stored run with `replay: true` and never pays twice.
+**Before anything else.** Kill switch on: `state: "disabled"`. No `apiKey`: `API_KEY_REQUIRED`; unknown, revoked or guest key: `API_KEY_INVALID`. No Solana key: `SOLANA_KEY_REQUIRED`; malformed: `SOLANA_KEY_INVALID`. No Robinhood Chain key: `ROBINHOOD_KEY_REQUIRED`; malformed: `ROBINHOOD_KEY_INVALID`. In these cases no run is created and nothing is paid. After the policy gate and still before signing: `ENVIRONMENT_NOT_FOUND`, `ROBINHOOD_INSUFFICIENT_GAS`, `PAYER_INSUFFICIENT_FUNDS`.
+
+**What you get back.** `runId`, `decision`, `state`, `reason`, `statuses { responseReceived, paymentVerified, veyaRecordAnchored }`, `payment { signature, solscan, feeSignature }`, `validators { agreed, required, total, reached }`, `veya { commitment, tx, blockscout, anchor, from }`, `receipt`, `account { saved }`, `output`. The same `idempotencyKey` again returns the stored run with `replay: true` and never pays twice.
 
 ## `veya_paid_run`
 
-**What it does.** Reads a run. With `resume: true` it retries Solana verification or anchoring for a pending run, or looks for an on-chain payment after a resource error. Never pays.
+**What it does.** Lists the runs saved to your VEYA account, or reads one of yours. With `resume: true` it retries Solana verification, the 2-of-3 validator check (`quorum_failed`) or anchoring for a pending run, or looks for an on-chain payment after a resource error. Never pays. Private to the account of the `apiKey` you pass: another key cannot list or read your runs. The `receipt` link in a run is different: it is public proof that anyone with the link can read, and it holds no keys, `apiKey` or input.
 
 **When to use it.** A call ended in `payment_unverifiable`, `commit_failed` or `resource_error`, or you want the proof links again.
 
-**Arguments.** `runId`, optional `resume`.
+**Arguments.** `apiKey`, optional `runId` (omit to list your runs), optional `resume`, optional `robinhoodPrivateKey` (needed to resume a `commit_failed` run). A run of another account reads as `unknown run`.
 
-**What you get back.** The same shape as `veya_paid_call` (without `output`).
+**What you get back.** With `runId`: the same shape as `veya_paid_call` (without `output`). Without: `{ paidRuns: [...] }` from your VEYA account.
 
 ---
 
@@ -780,9 +782,9 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_register_environment` | Writes | Key + payer |
 | `veya_register_pq_onchain` | Writes | Key + payer |
 | `veya_anchor_pq_attestation` | Writes | Key + payer |
-| `veya_paid_discover` | Paid Call Guard (opt-in) | Host level |
-| `veya_paid_call` | Paid Call Guard (opt-in) | Host level |
-| `veya_paid_run` | Paid Call Guard (opt-in) | Host level |
+| `veya_paid_discover` | Paid Call Guard | None |
+| `veya_paid_call` | Paid Call Guard | `apiKey` + `solanaPrivateKey` + `robinhoodPrivateKey` |
+| `veya_paid_run` | Paid Call Guard | `apiKey` |
 
 ## Related
 
@@ -791,5 +793,5 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what is SDK vs API
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [QUICKSTART.md](./QUICKSTART.md) — first five minutes  
-- [PAID_CALLS.md](./PAID_CALLS.md) — opt-in Paid Call Guard
+- [PAID_CALLS.md](./PAID_CALLS.md) — Paid Call Guard (paid calls from your own wallet)
 - [TRANSPORT.md](./TRANSPORT.md) — tool policy is saved on the account
