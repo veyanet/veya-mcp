@@ -29,6 +29,8 @@ People mix these up. They are not interchangeable.
 | Nothing | — | — | Describe, ping, hash, verify tx, PQ crypto, public registry, API health |
 | Product API key (`veya_dev_…` / `veya_live_…`) | Product site, after wallet login | Tool argument `apiKey` → MCP → `X-Api-Key` toward `api.veyanet.tech` | Rooms, proofs list, Build on the product API |
 | Your wallet private key | You | Tool argument `payerPrivateKey` or env `VEYA_PAYER_PRIVATE_KEY` | On-chain writes. `msg.sender` is **your** address |
+| Your Solana wallet secret key | You | Tool argument `solanaPrivateKey` on `veya_paid_call` | Paid Call Guard: pays one approved x402 call in USDC on Solana from **your** wallet |
+| Your Robinhood Chain key | You | Tool argument `robinhoodPrivateKey` on `veya_paid_call` (and `veya_paid_run` to resume) | Paid Call Guard: signs the `storeCommitment` record and pays its gas from **your** address |
 
 API-key writes are sent from your wallet. You need ETH on Robinhood Chain.
 
@@ -161,6 +163,8 @@ so the agent does not paste the key into a tool argument.
 
 If you pass `payerPrivateKey` to the **public** HTTP URL, that host holds the key for the duration of the call. Do not use a mainnet key. Testnet only.
 
+**Paid Call Guard (`veya_paid_call`).** A paid call takes three values: your product `apiKey` (checked against the VEYA API; the run is saved to that account), your **Solana** secret key in `solanaPrivateKey` (base58 or a JSON array of 64 numbers; pays the USDC) and your **Robinhood Chain** key in `robinhoodPrivateKey` (signs the record and pays its gas; it does not have to be the API key's wallet). Keys are used in memory only: not stored, logged, written to state, receipts or your account, or returned. The Solana key bytes are cleared after the call. The host still sees the keys while the call runs, so use dedicated wallets that hold only what you plan to spend. VEYA's policy caps what one call and one task can cost. Missing values return `API_KEY_REQUIRED`, `SOLANA_KEY_REQUIRED` or `ROBINHOOD_KEY_REQUIRED`; malformed ones `API_KEY_INVALID`, `SOLANA_KEY_INVALID` or `ROBINHOOD_KEY_INVALID`.
+
 Never log, screenshot, or commit the key. MCP does not put it in `/health`, landing HTML, or tool success payloads.
 
 ---
@@ -172,6 +176,10 @@ Never log, screenshot, or commit the key. MCP does not put it in `/health`, land
 | Missing `apiKey` | `{ "error": "apiKey required" }` |
 | Guest JWT on a write tool | Create a product API key at https://app.veyanet.tech (System → API Keys) and fund your wallet. |
 | Missing payer | `payerPrivateKey required` |
+| Paid call without `apiKey` / Solana key / Robinhood Chain key | `API_KEY_REQUIRED` / `SOLANA_KEY_REQUIRED` / `ROBINHOOD_KEY_REQUIRED` (nothing checked, signed or paid) |
+| Paid call with a revoked or unknown `apiKey` | `API_KEY_INVALID` |
+| Paid call with a malformed key | `SOLANA_KEY_INVALID` / `ROBINHOOD_KEY_INVALID` |
+| Paid call, wallet short of USDC or ETH | `PAYER_INSUFFICIENT_FUNDS` / `ROBINHOOD_INSUFFICIENT_GAS` (refused before signing) |
 | Payer ≠ API key wallet | payerPrivateKey does not match the wallet on this API key |
 | Empty / unfunded wallet | `Mainnet: 'Your wallet has no ETH on Robinhood Chain. Add funds and try again.' Testnet: 'You don't have testnet tokens. Please get them for the transaction.'` |
 | Guest + create environment | MCP `isError` (mint a product API key) |
