@@ -1,0 +1,158 @@
+{
+  "name": "veya-paid-call-guard",
+  "recordVersion": "veya-paid-call-v1",
+  "configVersion": 2,
+  "enabled": true,
+  "pins": {
+    "xpaySdk": "0.2.38",
+    "x402Core": "2.28.0",
+    "x402Svm": "2.28.0",
+    "veyaSdk": "1.2.9"
+  },
+  "providers": [
+    {
+      "id": "provider-1",
+      "label": "Tokens data API (x402, Solana USDC)",
+      "payer": "xpay-sdk",
+      "sdk": {
+        "platformFee": {
+          "url": "https://api.xona-agent.com/platform-fee",
+          "amountAtomic": "10000",
+          "payTo": "9VaDVp1Wb78G4Wm6VuTiMrpESjrUymXefQTHcJGRSTEA"
+        },
+        "guardrail": {
+          "maxPerTx": 0.01,
+          "maxPerDay": 0.1,
+          "allowedHosts": [
+            "api.xona-agent.com"
+          ],
+          "requireApprovalAbove": 0.02
+        }
+      }
+    }
+  ],
+  "resources": [
+    {
+      "id": "tokens.risk-summary",
+      "provider": "provider-1",
+      "url": "https://api.xona-agent.com/tokens-api/risk-summary",
+      "method": "POST",
+      "description": "Risk and quality summary for a Solana token mint: score, grade, label, trust flags.",
+      "input": {
+        "required": [
+          "mint"
+        ],
+        "properties": {
+          "mint": "solana-address"
+        }
+      },
+      "expectedResult": {
+        "httpStatus": 200,
+        "requiredFields": [
+          "success"
+        ],
+        "successValue": true
+      },
+      "x402": {
+        "x402Version": 2,
+        "scheme": "exact",
+        "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "assetSymbol": "USDC",
+        "assetDecimals": 6,
+        "payTo": "9VaDVp1Wb78G4Wm6VuTiMrpESjrUymXefQTHcJGRSTEA",
+        "amount": "10000",
+        "maxTimeoutSeconds": 1200,
+        "feePayer": "CjNFTjvBhbJJd2B5ePPMHRLx1ELZpa8dwQgGL727eKww"
+      }
+    },
+    {
+      "id": "tokens.asset-risk-summary",
+      "provider": "provider-1",
+      "payer": "x402-exact",
+      "url": "https://api.xona-agent.com/tokens-api/asset-risk-summary",
+      "method": "POST",
+      "description": "Risk score summary for a canonical asset (for example \"solana\" or \"usdc\"): score, grade, trust flags.",
+      "input": {
+        "required": [
+          "assetId"
+        ],
+        "optional": [
+          "mint"
+        ],
+        "properties": {
+          "assetId": "slug",
+          "mint": "solana-address"
+        }
+      },
+      "expectedResult": {
+        "httpStatus": 200,
+        "requiredFields": [
+          "success"
+        ],
+        "successValue": true
+      },
+      "x402": {
+        "x402Version": 2,
+        "scheme": "exact",
+        "network": "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+        "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "assetSymbol": "USDC",
+        "assetDecimals": 6,
+        "payTo": "9VaDVp1Wb78G4Wm6VuTiMrpESjrUymXefQTHcJGRSTEA",
+        "amount": "10000",
+        "maxTimeoutSeconds": 1200,
+        "feePayer": "CjNFTjvBhbJJd2B5ePPMHRLx1ELZpa8dwQgGL727eKww"
+      }
+    }
+  ],
+  "policy": {
+    "allowedTools": [
+      "veya_paid_call"
+    ],
+    "allowedHosts": [
+      "api.xona-agent.com"
+    ],
+    "allowedNetworks": [
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp"
+    ],
+    "allowedAssets": [
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    ],
+    "allowedPayees": [
+      "9VaDVp1Wb78G4Wm6VuTiMrpESjrUymXefQTHcJGRSTEA"
+    ],
+    "perCallCapAtomic": "10000",
+    "taskBudgetAtomic": "40000",
+    "approvalThresholdAtomic": "20000",
+    "maxCallsPerTask": 2
+  },
+  "solana": {
+    "payer": "3VYPYt2ZPsbSmhKHw5QJ56aR6QVJPBgvAP4F4utxywkJ",
+    "commitment": "finalized",
+    "rpcs": [
+      "https://api.mainnet-beta.solana.com",
+      "https://solana-rpc.publicnode.com"
+    ],
+    "explorer": "https://solscan.io/tx/"
+  },
+  "robinhood": {
+    "network": "Robinhood Chain Mainnet",
+    "chainId": 4663,
+    "rpc": "https://rpc.mainnet.chain.robinhood.com",
+    "contract": "0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674",
+    "method": "storeCommitment(bytes16,bytes32)",
+    "environmentUuid": "e2da689c-a671-4fa1-9376-bf29d7b13931",
+    "explorer": "https://robinhoodchain.blockscout.com"
+  },
+  "validators": {
+    "nodes": [],
+    "threshold": 2,
+    "rpcs": [
+      "https://solana-rpc.publicnode.com",
+      "https://api.mainnet-beta.solana.com",
+      "https://public.rpc.solanavibestation.com"
+    ],
+    "nodesNote": "Set VEYA_PAID_VALIDATOR_NODES to the three validator base URLs (comma-separated)."
+  }
+}
