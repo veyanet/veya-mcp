@@ -1,6 +1,6 @@
 {
   "name": "@veyanet/mcp",
-  "version": "1.2.11",
+  "version": "1.2.10",
   "description": "VEYA MCP - Streamable HTTP Model Context Protocol for Robinhood Chain. Default profile is Mainnet.",
   "license": "MIT",
   "type": "module",
