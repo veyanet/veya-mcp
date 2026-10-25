@@ -6,7 +6,7 @@
   **The official Model Context Protocol server for post-quantum agent tools, chain verification, sealed-execution service info, and protocol settlement on Robinhood Chain.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.11-cb3837.svg?style=flat-edge)](./package.json)
+  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.10-cb3837.svg?style=flat-edge)](./package.json)
   [![Node Version](https://img.shields.io/badge/Node-%3E%3D20-green.svg?style=flat-edge)](https://nodejs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-edge)](https://www.typescriptlang.org/)
   [![MCP Endpoint](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9.svg?style=flat-edge)](https://mcp.veyanet.tech/mcp)
@@ -243,7 +243,7 @@ https://mcp.veyanet.tech/mcp
 
 ## 🧩 Core Tools Overview
 
-`@veyanet/mcp` **1.2.11** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
+`@veyanet/mcp` **1.2.10** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
 
 ### 0. Proof
 
