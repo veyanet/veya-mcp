@@ -13,7 +13,7 @@ const ALLOWED: Record<RunState, RunState[]> = {
   resource_error: ["payment_unverifiable"],
   payment_unverifiable: ["verified"],
   verified: ["committed", "quorum_failed", "commit_failed"],
-  quorum_failed: [], commit_failed: ["committed"], committed: [], denied: [], payment_failed: [],
+  quorum_failed: ["quorum_failed", "committed", "commit_failed"], commit_failed: ["commit_failed", "committed"], committed: [], denied: [], payment_failed: [],
 };
 
 export type RunRecord = {
