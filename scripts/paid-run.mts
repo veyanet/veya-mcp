@@ -1,4 +1,4 @@
-/** Operator helper: read / resume / reconcile a run. Never pays. Usage: paid-run.mts <runId> [resume] */
+/** Server-side helper: read / resume / reconcile a run. Never pays. Usage: paid-run.mts <runId> [resume] */
 import { buildGuardFromEnv } from "../src/paid/tools.js";
 const [runId, mode] = process.argv.slice(2);
 const p = buildGuardFromEnv();
