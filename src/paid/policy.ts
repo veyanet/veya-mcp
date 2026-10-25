@@ -36,15 +36,15 @@ export function evaluatePolicy(cfg: PaidConfig, i: GateInput): GateResult {
   if (i.quote.accepts.length !== 1) return deny("CHALLENGE_CHANGED", `expected 1 option, got ${i.quote.accepts.length}`);
   const req = i.quote.accepts[0];
   const amount = BigInt(req.amount!);
-  if (amount > BigInt(cfg.policy.perCallCapAtomic)) return deny("OVER_PER_CALL_CAP", `price ${amount} > cap ${cfg.policy.perCallCapAtomic}`);
-  if (req.amount !== resource.x402.amount) return deny("CHALLENGE_CHANGED", `price ${req.amount} != pinned ${resource.x402.amount}`);
+  if (amount > BigInt(cfg.policy.perCallCapAtomic)) return deny("OVER_PER_CALL_CAP", `amount ${amount} > cap ${cfg.policy.perCallCapAtomic}`);
+  if (req.amount !== resource.x402.amount) return deny("CHALLENGE_CHANGED", `amount ${req.amount} != pinned ${resource.x402.amount}`);
   if (req.extra?.feePayer !== resource.x402.feePayer) return deny("CHALLENGE_CHANGED", `feePayer changed`);
   checks.push("per_call_cap", "pinned_challenge");
   const callCost = amount + payerFee(cfg, resource).amountAtomic;
-  if (callCost > BigInt(cfg.policy.approvalThresholdAtomic)) return deny("APPROVAL_REQUIRED", `cost ${callCost} > approval threshold ${cfg.policy.approvalThresholdAtomic}; no approver configured`);
+  if (callCost > BigInt(cfg.policy.approvalThresholdAtomic)) return deny("APPROVAL_REQUIRED", `call amount ${callCost} > approval threshold ${cfg.policy.approvalThresholdAtomic}; no approver configured`);
   checks.push("approval_threshold");
   if (i.taskBudgetAtomic > BigInt(cfg.policy.taskBudgetAtomic)) return deny("OVER_TASK_BUDGET", `requested task budget ${i.taskBudgetAtomic} > policy max ${cfg.policy.taskBudgetAtomic}`);
-  if (callCost > i.taskBudgetAtomic) return deny("OVER_TASK_BUDGET", `call cost ${callCost} (price + payer fee) > task budget ${i.taskBudgetAtomic}`);
+  if (callCost > i.taskBudgetAtomic) return deny("OVER_TASK_BUDGET", `call amount ${callCost} (resource amount + payer path amount) > task budget ${i.taskBudgetAtomic}`);
   checks.push("task_budget_static");
   return { allow: true, requirement: req, resource, callCostAtomic: callCost, checks };
 }
