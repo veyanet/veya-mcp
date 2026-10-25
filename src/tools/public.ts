@@ -1,3 +1,4 @@
+import { paidCallsStatus } from "../paid/tools.js";
 import { publicReplacer } from "../publicJson.js";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -37,6 +38,7 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
               fleet:
                 "Consensus and sealed capacity are provided by the product API (api.veyanet.tech).",
               publicPasteUrl: "https://mcp.veyanet.tech/mcp",
+              paidCallGuard: paidCallsStatus(),
             },
             publicReplacer,
             2,
