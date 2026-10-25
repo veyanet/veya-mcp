@@ -16,6 +16,8 @@ import { PinMismatchError } from "./payer.js";
 import type { Anchorer } from "./anchor.js";
 import { PAID_TOOL_NAMES } from "./tools.js";
 
+// Standalone checkout: point the shipped config at the in-process test validators.
+process.env.VEYA_PAID_VALIDATOR_NODES ??= "http://127.0.0.1:7701,http://127.0.0.1:7702,http://127.0.0.1:7703";
 const cfg0 = loadPaidConfig();
 const R = cfg0.resources[0];
 const PAYER = cfg0.solana.payer;
@@ -78,18 +80,25 @@ before(async () => { for (const n of cfg0.validators.nodes) { const r = await fe
 
 // ---------- happy path (mock money) ----------
 test("allowed call: paid -> verified -> 2/3 quorum -> committed, 3 distinct statuses, links", async () => {
-  const { guard, caller, anchor } = setup();
+  const { guard, caller, anchor, dir } = setup();
   const r = await call(guard);
-  assert.equal(r.state, "committed"); assert.equal(r.decision, "allowed"); assert.equal(caller.calls, 1); assert.equal(anchor.calls, 1);
+  assert.equal(r.state, "committed"); assert.equal(r.decision, "allowed"); assert.equal(caller.calls, 1); assert.equal(anchor.calls, 1); assert.match(r.reason ?? "", /^Recorded on Robinhood Chain in block \d+(, transaction 0x[0-9a-fA-F]+)?\.$/);
   assert.deepEqual(r.statuses, { responseReceived: true, paymentVerified: true, veyaRecordAnchored: true });
   assert.match(r.payment!.solscan!, /^https:\/\/solscan\.io\/tx\//); assert.match(r.veya!.blockscout!, /robinhoodchain\.blockscout\.com\/tx\/0x/);
-  assert.ok(existsSync(r.receipt!)); assert.deepEqual(r.output, { success: true, data: { score: 90, grade: "A" } });
+  assert.ok(existsSync(join(dir, "receipts", `${r.runId}.html`))); assert.equal(r.receipt, `/receipts/paid/${r.runId}`); assert.deepEqual(r.output, { success: true, data: { score: 90, grade: "A" } });
   const rec = guard.ledger.run(r.runId!)!; assert.deepEqual(rec.history.map((h) => h.state), ["prepared", "authorized", "paid", "verified", "committed"]);
   const e = rec.evidence as any; assert.equal(e.quorum.agreed, 3); assert.equal(e.commitRecord.resultHash.length, 64);
   assert.ok(!JSON.stringify(e.commitRecord).includes("grade"), "no raw output in commitment record");
   assert.equal(guard.ledger.taskView("task-1").spentAtomic, "20000", "price + platform fee counted");
 });
 
+test("owner evidence (account, key id) survives the quote and pay steps", async () => {
+  const { guard } = setup();
+  const r = await call(guard, { owner: { accountId: "acct-1", apiKeyId: "key-1" }, mode: "sponsored" });
+  assert.equal(r.state, "committed");
+  const e = guard.ledger.run(r.runId!)!.evidence as any;
+  assert.equal(e.accountId, "acct-1"); assert.equal(e.apiKeyId, "key-1"); assert.ok(e.quote && e.payerAddress);
+});
 // ---------- M3 #24 ----------
 test("#24 tool not allowed -> denied before any probe or payment", async () => {
   const { guard, caller, w } = setup();
@@ -227,6 +236,15 @@ test("#30 two validators down -> quorum_failed, no anchor", async () => {
 test("#30 one validator down -> 2/3 still commits", async () => {
   const { guard, w } = setup(); w.nodesDown.add("http://127.0.0.1:7703");
   const r = await call(guard); assert.equal(r.state, "committed"); assert.equal((guard.ledger.run(r.runId!)!.evidence as any).quorum.agreed, 2);
+});
+test("#30b quorum_failed: resume retries validation (still failing stays put), then commits once nodes are back; never pays again", async () => {
+  const { guard, w, anchor, caller } = setup(); w.nodesDown.add("http://127.0.0.1:7701"); w.nodesDown.add("http://127.0.0.1:7702");
+  const r = await call(guard); assert.equal(r.state, "quorum_failed"); assert.equal(caller.calls, 1);
+  const again = await guard.resume(r.runId!); assert.equal(again.state, "quorum_failed"); assert.equal(anchor.calls, 0);
+  w.nodesDown.clear();
+  const ok = await guard.resume(r.runId!); assert.equal(ok.state, "committed"); assert.equal(anchor.calls, 1); assert.equal(caller.calls, 1);
+  assert.deepEqual(ok.statuses, { responseReceived: true, paymentVerified: true, veyaRecordAnchored: true });
+  const twice = await guard.resume(r.runId!); assert.equal(twice.state, "committed"); assert.equal(anchor.calls, 1);
 });
 test("#30 tampered signatures on 2 nodes -> quorum_failed", async () => {
   const { guard, w, anchor } = setup(); w.tamper.add("http://127.0.0.1:7701"); w.tamper.add("http://127.0.0.1:7703");
@@ -446,4 +464,32 @@ test("state folder lock: a second live process cannot write the same ledger", as
   assert.throws(() => new Ledger(dir, { writer: true }), /STATE_LOCKED/);
   writeFileSync(join(dir, "ledger.lock"), "999999"); // stale pid
   new Ledger(dir, { writer: true });
+});
+
+test("#29b anchor missing after payment: resume stays commit_failed cleanly (no throw, no pay), then commits once configured", async () => {
+  const { guard, anchor, caller } = setup(); const d = (guard as any).d; let configured = false;
+  d.anchorer = () => { if (!configured) throw new Error("ANCHOR_NOT_CONFIGURED"); return anchor; };
+  const r = await call(guard); assert.equal(r.state, "commit_failed"); assert.match(r.reason!, /ANCHOR_NOT_CONFIGURED/);
+  assert.deepEqual(r.validators, { agreed: 3, required: 2, total: 3, reached: true }); assert.equal(r.veya!.anchor, "failed");
+  const again = await guard.resume(r.runId!); assert.equal(again.state, "commit_failed"); assert.match(again.reason!, /^retry: ANCHOR_NOT_CONFIGURED/);
+  const again2 = await guard.resume(r.runId!); assert.equal(again2.state, "commit_failed");
+  assert.equal(caller.calls, 1); assert.equal(anchor.calls, 0);
+  configured = true;
+  const ok = await guard.resume(r.runId!); assert.equal(ok.state, "committed"); assert.equal(ok.veya!.anchor, "anchored"); assert.ok(ok.veya!.tx);
+  assert.equal(ok.validators!.agreed, 3); assert.equal(caller.calls, 1); assert.equal(anchor.calls, 1);
+});
+
+test("#29c anchor not configured: new paid call refused before anything is signed or paid; replay of earlier runs still answers", async () => {
+  const { guard, caller, w } = setup(); const d = (guard as any).d;
+  const first = await call(guard); assert.equal(first.state, "committed");
+  d.anchorConfigured = () => false; const probes = w.probes;
+  const r = await guard.call({ taskId: "t-anchor", idempotencyKey: "idem-anchor-none", input: { assetId: "solana" } });
+  assert.equal(r.state, "anchor_not_configured"); assert.equal(r.decision, "blocked"); assert.match(r.reason!, /^ANCHOR_NOT_CONFIGURED: .*nothing was checked, signed or paid/);
+  assert.equal(caller.calls, 1); assert.equal(w.probes, probes); assert.equal(r.runId, undefined);
+});
+
+test("#30c quorum_failed retry that fails again stays quorum_failed with a retry reason", async () => {
+  const { guard, w, caller } = setup(); w.nodesDown.add("http://127.0.0.1:7701"); w.nodesDown.add("http://127.0.0.1:7702");
+  const r = await call(guard); assert.deepEqual(r.validators, { agreed: 1, required: 2, total: 3, reached: false }); assert.equal(r.veya!.anchor, "not_attempted");
+  const again = await guard.resume(r.runId!); assert.equal(again.state, "quorum_failed"); assert.match(again.reason!, /^retry: 1\/3/); assert.equal(caller.calls, 1);
 });
