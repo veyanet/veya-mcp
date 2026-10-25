@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,18 +36,27 @@ export type PaidConfig = {
   };
   solana: { payer: string; commitment: "finalized"; rpcs: string[]; explorer: string };
   robinhood: { network: string; chainId: number; rpc: string; contract: string; method: string; environmentUuid: string; explorer: string };
-  validators: { nodes: string[]; threshold: number; rpcs: string[] };
+  validators: { nodes: string[]; threshold: number; rpcs: string[]; nodesNote?: string };
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
 // src/paid -> repo root is 3 up; bundled dist/ -> 2 up.
 export const PAID_ROOT = resolve(process.env.VEYA_PAID_ROOT || (basename(here) === "dist" ? join(here, "..", "..") : join(here, "..", "..", "..")));
 
-export function loadPaidConfig(path = process.env.VEYA_PAID_CONFIG || join(PAID_ROOT, "config", "paid-calls.json")): PaidConfig {
+/** Config shipped inside the npm package (no secrets; validator URLs come from VEYA_PAID_VALIDATOR_NODES). */
+export const BUNDLED_PAID_CONFIG = join(here, ...(basename(here) === "dist" ? [".."] : ["..", ".."]), "config", "paid-calls.json");
+/** VEYA_PAID_CONFIG, else <VEYA_PAID_ROOT>/config/paid-calls.json if present, else the bundled config. */
+export function paidConfigPath(): string {
+  if (process.env.VEYA_PAID_CONFIG) return process.env.VEYA_PAID_CONFIG;
+  const rooted = join(PAID_ROOT, "config", "paid-calls.json");
+  return existsSync(rooted) ? rooted : BUNDLED_PAID_CONFIG;
+}
+
+export function loadPaidConfig(path = paidConfigPath()): PaidConfig {
   const cfg = JSON.parse(readFileSync(path, "utf8")) as PaidConfig;
   // Deploy-time override: where the 3 validator nodes live (comma-separated base URLs).
   if (process.env.VEYA_PAID_VALIDATOR_NODES) cfg.validators.nodes = process.env.VEYA_PAID_VALIDATOR_NODES.split(",").map((s) => s.trim().replace(/\/$/, "")).filter(Boolean);
-  if (cfg.validators.threshold < 2 || cfg.validators.nodes.length < 3) throw new Error("CONFIG: need >=3 validators and threshold >=2");
+  if (cfg.validators.threshold < 2 || cfg.validators.nodes.length < 3) throw new Error("CONFIG: need >=3 validators and threshold >=2 (set VEYA_PAID_VALIDATOR_NODES)");
   assertIndependentRpcs(cfg);
   if (cfg.solana.commitment !== "finalized") throw new Error("CONFIG: Solana commitment must be finalized");
   for (const r of cfg.resources) {
