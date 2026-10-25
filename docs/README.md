@@ -53,7 +53,7 @@ flowchart TB
 
 | Item | Value |
 |------|-------|
-| npm | `@veyanet/mcp` **1.2.11** |
+| npm | `@veyanet/mcp` **1.2.10** |
 | SDK | `@veyanet/sdk` **^1.2.9** |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Product API | `https://api.veyanet.tech` |
