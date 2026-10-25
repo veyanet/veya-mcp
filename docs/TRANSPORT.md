@@ -127,13 +127,14 @@ Shape (fields from code):
 |-------|---------|
 | `status` | `"ok"` if the MCP process is up (not a fleet check) |
 | `service` | `@veyanet/mcp` |
-| `version` | `1.2.9` (from `MCP_SERVICE_VERSION`) |
+| `version` | `1.2.11` (from `MCP_SERVICE_VERSION`) |
 | `publicMcpUrl` | From `PUBLIC_MCP_URL` env |
 | `network` | `mainnet` or `testnet` |
 | `contractAddress` | `Veya.sol` |
 | `writesEnabled` | `true` (own-wallet write tools registered) |
 | `operatorRelayerWrites` | `false` (own-wallet writes never use the host relayer) |
 | `sealed` | `"AES-256-GCM"` |
+| `paidCallGuard` | `{ enabled: false }` when off. When on: `enabled`, `killSwitch`, `tools`, `requires` (`apiKey`, `solanaPrivateKey`, `robinhoodPrivateKey`), `payer` (your own wallets), `runsSavedTo` (your VEYA account), `resources`, `paymentNetwork`, `recordNetwork`, `validators`, `receipts`. Never keys or paths |
 | `settlement` | `"Robinhood Chain Mainnet"` (or `"Robinhood Chain Testnet"` on Testnet) |
 
 This is **MCP process** health. Product fleet health is `veya_api_health` → `GET https://api.veyanet.tech/health`.
