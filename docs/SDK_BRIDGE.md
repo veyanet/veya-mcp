@@ -46,10 +46,10 @@ The hosted product API also imports the SDK. This tree's default is Mainnet, con
 From this package’s `package.json`:
 
 ```json
-"@veyanet/sdk": "^1.2.9"
+"@veyanet/sdk": "1.2.11"
 ```
 
-MCP version is **1.2.10**. SDK version is **^1.2.9** (caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
+MCP version is **1.2.11**. SDK version is **1.2.11** (exact pin, no caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
 
 ---
 
@@ -72,7 +72,7 @@ No `payerPrivateKey`. Used for ping, hash, verify, on-chain reads, `runConsensus
 
 ### `createWriteClient(cfg, payerPrivateKey)`
 
-Same fields plus the **user's** `payerPrivateKey`. Used only by write tools after a product `apiKey` check. The hosted relayer is not passed here.
+Same fields plus the **user's** `payerPrivateKey`. Used only by write tools after a product `apiKey` check. The hosted signer is not passed here.
 
 ---
 
@@ -106,7 +106,7 @@ flowchart TB
   SDK --> VAL["POST /execute"]
   SDK --> SEAL["POST /protected"]
   API --> MEM["scoped memory by API key"]
-  API --> PG["Product DB / relayer"]
+  API --> PG["Product DB / host signer"]
 ```
 
 | Area | Backend |
@@ -146,7 +146,7 @@ MCP `src/api.ts` `apiRequest`:
 - Product keys sent as `X-Api-Key` (and Bearer); JWTs as Bearer only
 - Returns `{ httpStatus, body }`. HTTP 4xx/5xx also set MCP `isError`.
 
-That path never constructs `VeyaClient`. The API server, elsewhere, uses the SDK for its own relayer.
+That path never constructs `VeyaClient`. The API server, elsewhere, uses the SDK for its own host signer.
 
 ---
 
