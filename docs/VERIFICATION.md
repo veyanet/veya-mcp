@@ -13,12 +13,12 @@ You need a browser, `curl`, an MCP client (or this repo’s smoke script if you 
 1. [What you are proving](#1-what-you-are-proving)
 2. [Procedure A — public reads (no keys)](#2-procedure-a--public-reads-no-keys)
 3. [Procedure B — product API service info](#3-procedure-b--product-api-service-info)
-4. [Procedure C — independent SDK check](#4-procedure-c--independent-sdk-check)
+4. [Procedure C — standalone SDK check](#4-procedure-c--standalone-sdk-check)
 5. [Procedure D — own-wallet writes](#5-procedure-d--own-wallet-writes)
 6. [Repo scripts](#6-repo-scripts)
 7. [Evidence pack](#7-evidence-pack)
 8. [Pass / fail table](#8-pass--fail-table)
-9. [Procedure E — Paid Call Guard runs](#9-procedure-e--paid-call-guard-runs)
+9. [Procedure E — Metered Call Guard runs](#9-procedure-e--metered-call-guard-runs)
 
 ---
 
@@ -80,7 +80,7 @@ Open:
 https://robinhoodchain.blockscout.com/tx/0xa09f361779af4910157906937d54fc1f670fc7e6044aa06e62f25f5cca07461c
 ```
 
-Confirm the explorer `to` address is `Veya.sol` and the tool’s parsed digest/events match the receipt. This is a Mainnet `storeCommitment` transaction on `Veya.sol` (a Paid Call Guard run record).
+Confirm the explorer `to` address is `Veya.sol` and the tool’s parsed digest/events match the receipt. This is a Mainnet `storeCommitment` transaction on `Veya.sol` (a Metered Call Guard run record).
 
 ### A5. Stronger on-chain mapping check
 
@@ -100,7 +100,7 @@ Optional guest path: `veya_guest_login` then `veya_list_proofs`. Build tools as 
 
 ---
 
-## 4. Procedure C — independent SDK check
+## 4. Procedure C — standalone SDK check
 
 MCP and SDK must agree on pins. From any machine:
 
@@ -117,7 +117,7 @@ If the SDK profile (network, contract) and MCP health disagree, MCP env is wrong
 ## 5. Procedure D — own-wallet writes
 
 1. Confirm write tools exist (`tools/list` includes `veya_store_commitment`).
-2. Call `veya_writes_status` — own-wallet writes, not hosted relayer.
+2. Call `veya_writes_status` — own-wallet writes, not hosted signer.
 3. Call a write **without** `apiKey` — `{ "error": "apiKey required" }`.
 4. Call a write with a random unfunded `payerPrivateKey` after a valid `apiKey` (or expect API-key reject first). Empty wallet must return: `You don't have testnet tokens. Please get them for the transaction.`
 5. With a real product key **and** that same funded wallet, call `veya_store_commitment` or `veya_anchor_proof`. Result `from` must be the user address.
@@ -134,7 +134,7 @@ Public paste URL still allows reads with no key. Prefer self-host for `VEYA_PAYE
 | Command | What it checks |
 |---------|----------------|
 | `npm run smoke` | In-process `initialize`, `tools/list` (51 tools), `veya_describe`, `veya_ping_chain` |
-| `npm test` | Unit tests (config, etc.) and the Paid Call Guard suite in `src/paid/` (mock money; needs the three validator nodes running) |
+| `npm test` | Unit tests (config, etc.) and the Metered Call Guard suite in `src/paid/` (mock money; needs the three validator nodes running) |
 | `npm run lint` | `tsc --noEmit` |
 | `tsx scripts/verify-full.ts` | Local MCP workflow: reads need no key, apiKey required for product tools, unfunded payer message |
 | `tsx scripts/verify-live.ts` | Live public endpoints (operator) |
@@ -175,7 +175,7 @@ Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for product keys and own-walle
 
 ---
 
-## 9. Procedure E — Paid Call Guard runs
+## 9. Procedure E — Metered Call Guard runs
 
 Only for hosts with `VEYA_PAID_CALLS=1`. See [PAID_CALLS.md](./PAID_CALLS.md).
 
