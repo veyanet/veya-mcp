@@ -53,11 +53,11 @@ export function assertRelayerDaily(
   const row = perDay.get(id);
   const keyCount = !row || row.day !== day ? 0 : row.count;
   if (keyCount >= limit) {
-    throw new Error(`Daily seal limit: ${limit} relayer sends for this API key`);
+    throw new Error(`Daily seal limit: ${limit} host-signer sends for this API key`);
   }
   const globalCount = globalDay.day === day ? globalDay.count : 0;
   if (globalCount >= globalLimit) {
-    throw new Error(`Daily seal limit: ${globalLimit} relayer sends for this host`);
+    throw new Error(`Daily seal limit: ${globalLimit} host-signer sends for this host`);
   }
 }
 
