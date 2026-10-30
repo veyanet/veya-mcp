@@ -314,7 +314,7 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
 
   server.tool(
     "veya_anchor_proof",
-    "Anchor a content proof on Veya.sol from YOUR wallet (apiKey + payerPrivateKey). Does not use the hosted relayer.",
+    "Anchor a content proof on Veya.sol from YOUR wallet (apiKey + payerPrivateKey). Does not use the hosted signer.",
     {
       apiKey,
       sessionToken,
