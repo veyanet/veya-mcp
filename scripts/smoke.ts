@@ -79,7 +79,7 @@ async function main() {
     });
     assert.equal(describe.status, 200);
     assert.ok(
-      String(describe.raw).includes("46630") || String(describe.json?.result?.content?.[0]?.text).includes("46630"),
+      String(describe.json?.result?.content?.[0]?.text ?? describe.raw).includes(cfg.contractAddress),
       describe.raw.slice(0, 500),
     );
     console.log("[smoke] veya_describe ok");
@@ -92,7 +92,7 @@ async function main() {
     });
     assert.equal(ping.status, 200, ping.raw.slice(0, 400));
     const pingText = JSON.stringify(ping.json ?? ping.raw);
-    assert.ok(pingText.includes("46630") || pingText.includes("chainId"), pingText.slice(0, 500));
+    assert.ok(pingText.includes("blockNumber") && pingText.includes(cfg.contractAddress), pingText.slice(0, 500));
     console.log("[smoke] veya_ping_chain ok");
 
     console.log("[smoke] PASS");
