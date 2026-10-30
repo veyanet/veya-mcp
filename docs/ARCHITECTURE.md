@@ -4,7 +4,7 @@
 
 This document explains how the MCP server is built, who talks to whom, and what a tool call actually does. Words stay simple. Details stay real.
 
-[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.10-cb3837?style=flat-edge)](../package.json)
+[![@veyanet/mcp](https://img.shields.io/badge/%40veyanet%2Fmcp-1.2.11-cb3837?style=flat-edge)](../package.json)
 [![Robinhood Mainnet](https://img.shields.io/badge/Robinhood%20Chain-Mainnet-blue?style=flat-edge)](https://robinhoodchain.blockscout.com/address/0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674)
 [![Public MCP](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9?style=flat-edge)](https://mcp.veyanet.tech/mcp)
 
@@ -31,7 +31,7 @@ This document explains how the MCP server is built, who talks to whom, and what 
 15. [Failure modes](#15-failure-modes)
 16. [Invariants](#16-invariants)
 17. [Glossary](#17-glossary)
-18. [Paid Call Guard](#18-paid-call-guard)
+18. [Metered Call Guard](#18-metered-call-guard)
 
 ---
 
@@ -70,8 +70,8 @@ Live product facts:
 
 | Field | Value |
 |-------|-------|
-| npm package | `@veyanet/mcp` **1.2.10** |
-| SDK it depends on | `@veyanet/sdk` **^1.2.9** |
+| npm package | `@veyanet/mcp` **1.2.11** |
+| SDK it depends on | `@veyanet/sdk` **1.2.11** (exact pin) |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Landing | `https://mcp.veyanet.tech/` |
 | MCP health | `https://mcp.veyanet.tech/health` |
@@ -375,7 +375,7 @@ flowchart TB
 | Product | `apiKey` argument | Product `/auth`, `/v1`, `/api/verify` |
 | Writes | `apiKey` + user payer | SDK `EvmAnchor` from the user's wallet |
 
-**51 tools**. Own-wallet writes are always listed. **54** with Paid Call Guard on (`VEYA_PAID_CALLS=1`, [section 18](#18-paid-call-guard)).
+**51 tools**. Own-wallet writes are always listed. **54** with Metered Call Guard on (`VEYA_PAID_CALLS=1`, [section 18](#18-metered-call-guard)).
 
 ---
 
@@ -385,7 +385,7 @@ flowchart TB
 ┌─────────────────────────────────────────────────────────────┐
 │  MCP Client                                                 │
 │  Trusts: TLS to mcp.veyanet.tech, JSON tool text            │
-│  Does not get: validator ports, hosted relayer key              │
+│  Does not get: validator ports, hosted signer key              │
 └────────────────────────────┬────────────────────────────────┘
                              │ HTTPS
                              ▼
@@ -484,7 +484,7 @@ Guest is a **shared demo Use path**. It is not the official token-customer story
 | Agent memory | Product API, one box per API key |
 | Guest proofs, rooms, public agents | Product API database |
 | Commitments, environments, attestations | `Veya.sol` on the selected profile. Mainnet is Robinhood Chain Mainnet. Testnet is Robinhood Chain Testnet |
-| Relayer key | Server env only |
+| Host signer key | Server env only |
 
 Nothing in MCP persists guest JWTs.
 
@@ -556,11 +556,11 @@ These must stay true in code and docs:
 | Boundnet | Deny-by-default tool routing between agents |
 | Use | Guest-allowed product path (list/stamp proofs) |
 | Build | Create rooms, deploy agents, protected exec — wallet, not guest |
-| Relayer | Unused on the own-wallet MCP write path. Gas is sent from the user's wallet. |
+| Host signer | Unused on the own-wallet MCP write path. Gas is sent from the user's wallet. |
 | Commitment | 32-byte digest stored on chain |
 | Fail closed | Returns an error or false when a step can't complete |
 
-## 18. Paid Call Guard
+## 18. Metered Call Guard
 
 Enabled per server with `VEYA_PAID_CALLS=1` (on at the hosted URL). Adds three tools (`veya_paid_discover`, `veya_paid_call`, `veya_paid_run`) and the read-only route `/receipts/paid/:runId`. Code: `src/paid/`. Guide: [PAID_CALLS.md](./PAID_CALLS.md).
 
@@ -584,7 +584,7 @@ flowchart LR
 
 | Module | Role |
 |--------|------|
-| `config.ts` | Loads the config file; checks providers, payer paths, validator count, independent RPC providers, `finalized`. |
+| `config.ts` | Loads the config file; checks providers, payer paths, validator count, separate RPC providers, `finalized`. |
 | `policy.ts` | Pure policy gate, unpaid quote probe, strict input check. |
 | `payerKey.ts` | Parses the caller's `solanaPrivateKey` (base58 or 64-number JSON array) in memory and derives the public address. Never stores or echoes the key. |
 | `robinhoodKey.ts` | Parses the caller's `robinhoodPrivateKey` (32-byte hex) and derives the address. Never echoes the key. |
@@ -602,7 +602,7 @@ Trust notes:
 - The caller pays from their own Solana wallet (`solanaPrivateKey`) and records from their own Robinhood Chain wallet (`robinhoodPrivateKey`). Keys are used in memory for one call; only the public addresses are kept as evidence.
 - Idempotency keys, task budgets and run reads are scoped to the caller's VEYA account.
 - Money moves in one step only, after the gate, and is never retried automatically.
-- Paid calls never use the product relayer, so no other tool gains write power.
+- Metered calls never use the product host signer, so no other tool gains write power.
 
 ## Related docs
 
