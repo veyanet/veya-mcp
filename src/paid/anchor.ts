@@ -38,11 +38,11 @@ export async function anchorPreflight(cfg: PaidConfig, address: string, environm
   const provider = new JsonRpcProvider(cfg.robinhood.rpc, cfg.robinhood.chainId, { staticNetwork: true });
   const c = new Contract(cfg.robinhood.contract, ABI, provider);
   const env = await c.environments(uuidToBytes16(environmentUuid));
-  if (!env.exists) return `ENVIRONMENT_NOT_FOUND: environment ${environmentUuid} is not registered on Veya.sol. Omit environmentUuid to use the default VEYA environment, or register yours with veya_register_environment. Nothing was signed or paid.`;
+  if (!env.exists) return `ENVIRONMENT_NOT_FOUND: environment ${environmentUuid} is not registered on Veya.sol. Omit environmentUuid to use the default VEYA environment, or register yours with veya_register_environment. Nothing was signed or spent.`;
   const [bal, fee] = await Promise.all([provider.getBalance(address), provider.getFeeData()]);
   const price = fee.maxFeePerGas ?? fee.gasPrice ?? 0n;
   const need = price * ANCHOR_GAS_LIMIT;
-  if (bal === 0n || bal < need) return `ROBINHOOD_INSUFFICIENT_GAS: ${who} Robinhood Chain wallet ${address} holds ${bal} wei ETH; recording this run needs about ${need} wei. Add ETH and try again. Nothing was signed or paid.`;
+  if (bal === 0n || bal < need) return `ROBINHOOD_INSUFFICIENT_GAS: ${who} Robinhood Chain wallet ${address} holds ${bal} wei ETH; recording this run needs about ${need} wei. Add ETH and try again. Nothing was signed or spent.`;
   return null;
 }
 /** Generous upper bound for one storeCommitment (measured ~116k on mainnet). */
