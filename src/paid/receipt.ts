@@ -13,7 +13,7 @@ function footer(r: RunRecord): string {
   const p = (t: string) => `<p class="sub" style="margin-top:20px">${t}</p>`;
   if (!(r.decision as any)?.allow) return p("VEYA policy stopped this call before anything was signed. No payment was made.");
   if (r.state === "committed") return p("This is cross-chain evidence: the payment settles on Solana and VEYA anchors a commitment on Robinhood Chain afterwards. It is not one atomic cross-chain transaction, and it does not prove the resource's answer is correct.");
-  if (r.state === "payment_failed") return p(`The policy allowed this call, but the payment did not go through, so nothing was paid and nothing was recorded on Robinhood Chain. Reason: ${esc(lastReason(r))}`);
+  if (r.state === "payment_failed") return p(`The policy allowed this call, but the payment did not go through, so nothing was spent and nothing was recorded on Robinhood Chain. Reason: ${esc(lastReason(r))}`);
   return p(`This run is not complete (state: ${esc(r.state)}), so it is not cross-chain evidence yet. Reason: ${esc(lastReason(r))}`);
 }
 
@@ -27,7 +27,7 @@ export function renderReceiptHtml(r: RunRecord): string {
 <style>body{font-family:Inter,system-ui,sans-serif;background:#f7f8fc;color:#0f172a;margin:0}main{max-width:760px;margin:40px auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:32px}
 h1{font-size:22px;margin:0 0 4px}.sub{color:#64748b;margin-bottom:24px}table{width:100%;border-collapse:collapse}td{padding:8px 6px;border-bottom:1px solid #f1f5f9;vertical-align:top;font-size:14px}td:first-child{color:#64748b;width:38%}
 code{font-size:12px;word-break:break-all}.ok{color:#047857;font-weight:600}.no{color:#b91c1c;font-weight:600}.badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#eef2ff;color:#4338ca;font-weight:600}a{color:#4f46e5}</style></head>
-<body><main><img src="/assets/veya-logo.png" alt="VEYA" height="28" style="margin-bottom:12px"><h1>VEYA run receipt</h1><div class="sub">VEYA Paid Call Guard · agent resource call checked by VEYA policy, verified, and recorded on Robinhood Chain</div>
+<body><main><img src="/assets/veya-logo.png" alt="VEYA" height="28" style="margin-bottom:12px"><h1>VEYA run receipt</h1><div class="sub">VEYA Metered Call Guard · agent resource call checked by VEYA policy, verified, and recorded on Robinhood Chain</div>
 <table>
 <tr><td>Run</td><td><code>${esc(r.runId)}</code></td></tr>
 <tr><td>Final state</td><td><span class="badge">${esc(r.state)}</span></td></tr>
