@@ -50,7 +50,7 @@ export function registerPublicTools(server: McpServer, cfg: McpServiceConfig): v
 
   server.tool(
     "veya_ping_chain",
-    "Ping Robinhood Chain RPC — chain id, block, contract",
+    "Ping Robinhood Chain RPC — block, contract",
     {},
     async () => {
       const client = createReadClient(cfg);
