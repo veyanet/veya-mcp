@@ -21,7 +21,7 @@ async function freshKey() {
 export const KEY_A = "veya_live_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa_secretA";
 export function fakeAccounts(saved: any[] = []) {
   return {
-    async account(k: string) { const { AccountError } = await import("./tools.js"); if (!k.startsWith("veya_")) throw new AccountError("API_KEY_INVALID: bad"); if (k.includes("revoked")) throw new AccountError("API_KEY_INVALID: this apiKey was rejected (unknown or revoked). Nothing was signed or paid."); return { accountId: k.includes("bbbb") ? "acct-B" : "acct-A", wallet: "0x0" }; },
+    async account(k: string) { const { AccountError } = await import("./tools.js"); if (!k.startsWith("veya_")) throw new AccountError("API_KEY_INVALID: bad"); if (k.includes("revoked")) throw new AccountError("API_KEY_INVALID: this apiKey was rejected (unknown or revoked). Nothing was signed or spent."); return { accountId: k.includes("bbbb") ? "acct-B" : "acct-A", wallet: "0x0" }; },
     async saveRun(_k: string, r: any) { saved.push(r); }, async getRun() { return undefined; }, async listRuns() { return { paidRuns: saved }; },
   };
 }
@@ -122,7 +122,7 @@ test("anchor errors shown to callers never contain server file paths", async () 
 
 test("paid tools reject unknown arguments with INPUT_INVALID and echo no names or values", async () => {
   const { unknownPaidArgs } = await import("./tools.js");
-  const secret = "5Kd3NBUAdUnhyzenEwVLy9pBKxSwXvE9FMPyR4UKZvpe6E3AgLr";
+  const secret = "fake-wif-not-a-real-key-0000"; // not a secret: test fixture
   const m = unknownPaidArgs("veya_paid_call", { taskId: "t", idempotencyKey: "k".repeat(8), input: {}, [secret]: secret, secretKey: secret })!;
   assert.match(m, /^INPUT_INVALID: 2 unknown argument/); assert.ok(!m.includes(secret) && !m.includes("secretKey"));
   assert.equal(unknownPaidArgs("veya_paid_call", { taskId: "t", idempotencyKey: "kkkkkkkk", input: {}, apiKey: "x", solanaPrivateKey: "x", robinhoodPrivateKey: "y", environmentUuid: "z" }), null);
