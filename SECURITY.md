@@ -70,7 +70,7 @@ Details: [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md), [docs/AUTHENTICATION.md
 Report these against `@veyanet/mcp`:
 
 - Bypass of the product-key write gate (on-chain write without a `veya_dev_` / `veya_live_` key)
-- On-chain write that spends a hosted relayer when the caller used a product API key (user must be `msg.sender`)
+- On-chain write that spends a hosted signer when the caller used a product API key (user must be `msg.sender`)
 - Leakage of `payerPrivateKey` or `apiKey` via tool output, logs, `/health`, or landing HTML
 - CORS misconfiguration that exfiltrates credentialed browser sessions
 - Chain settlement against a mismatched chain id when writes are enabled (MCP failing to use SDK `ensureRobinhoodChain` / wrong pins)
@@ -113,7 +113,7 @@ Acknowledgment target: **72 hours**. Coordinated disclosure before public detail
 
 ## Operator hardening checklist
 
-- Public MCP serves open reads plus own-wallet writes (product `apiKey` + user wallet). Do not enable a hosted relayer on the public URL
+- Public MCP serves open reads plus own-wallet writes (product `apiKey` + user wallet). Do not enable a hosted signer on the public URL
 - `chmod 600` on `.env`
 - Do not expose `their configured ports` / `<sealed-port>` on the public internet
 - Monitor the explorer for unexpected txs from **user** wallets that called this host
@@ -121,4 +121,4 @@ Acknowledgment target: **72 hours**. Coordinated disclosure before public detail
 - Keep `PUBLIC_MCP_URL=https://mcp.veyanet.tech/mcp` so humans are never told to paste a private bind
 - JSON body cap is 1 MB — keep proxy limits aligned; rate-limit `/mcp` at the edge
 - Prefer self-host for `VEYA_PAYER_PRIVATE_KEY` instead of sending a private key to the public URL
-- Paid Call Guard (if enabled): keep the payer wallet funded only for its budget, keep the anchor wallet separate from the relayer, and use `VEYA_PAID_CALLS_DISABLED=1` or `state/DISABLED` as the kill switch. See [docs/PAID_CALLS.md](./docs/PAID_CALLS.md)
+- Metered Call Guard (if enabled): keep the payer wallet funded only for its budget, keep the anchor wallet separate from the host signer, and use `VEYA_PAID_CALLS_DISABLED=1` or `state/DISABLED` as the kill switch. See [docs/PAID_CALLS.md](./docs/PAID_CALLS.md)
