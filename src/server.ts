@@ -28,7 +28,7 @@ export function createMcpServer(cfg: McpServiceConfig): McpServer {
   registerRegistryTools(server, cfg);
   registerProductTools(server, cfg);
   registerWriteTools(server, cfg);
-  // VEYA Paid Call Guard: opt-in only, so the hosted surface is unchanged unless enabled.
+  // VEYA Metered Call Guard: opt-in only, so the hosted surface is unchanged unless enabled.
   if (process.env.VEYA_PAID_CALLS === "1") registerPaidCallTools(server);
 
   return server;
