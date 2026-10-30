@@ -484,7 +484,7 @@ test("#29c anchor not configured: new paid call refused before anything is signe
   const first = await call(guard); assert.equal(first.state, "committed");
   d.anchorConfigured = () => false; const probes = w.probes;
   const r = await guard.call({ taskId: "t-anchor", idempotencyKey: "idem-anchor-none", input: { assetId: "solana" } });
-  assert.equal(r.state, "anchor_not_configured"); assert.equal(r.decision, "blocked"); assert.match(r.reason!, /^ANCHOR_NOT_CONFIGURED: .*nothing was checked, signed or paid/);
+  assert.equal(r.state, "anchor_not_configured"); assert.equal(r.decision, "blocked"); assert.match(r.reason!, /^ANCHOR_NOT_CONFIGURED: .*nothing was checked, signed or spent/);
   assert.equal(caller.calls, 1); assert.equal(w.probes, probes); assert.equal(r.runId, undefined);
 });
 
