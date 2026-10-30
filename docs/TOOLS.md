@@ -127,7 +127,7 @@ Hex arguments: strip `0x` is fine. Environment/agent UUIDs on chain are **16 byt
 
 ## `veya_describe`
 
-**What it does.** Returns a JSON service info from config: package name and version, public paste URL, the selected network: Mainnet (default) or Testnet, with contract, RPC and explorer, product API URL, sealed = AES-256-GCM, how writes work, and that fleet is API-owned. Use `veya_ping_chain` for a live RPC check.
+**What it does.** Returns JSON service info from config: package name and version, public paste URL, the selected network: Mainnet (default) or Testnet, with contract, RPC and explorer, product API URL, sealed = AES-256-GCM, how writes work, and that fleet is API-owned. Use `veya_ping_chain` for a live RPC check.
 
 **When to use it.** First call after connecting. Diligence. “What is this MCP?”
 
@@ -171,7 +171,7 @@ With `anchor` true, the call also needs `apiKey`, `environmentId` for an environ
 | `environmentId` | string | yes when `anchor` is true |
 | `payerPrivateKey` | string | yes when `anchor` is true |
 
-**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. A receipt with no VEYA log and a receipt that called a different contract both return that full object. The second one sets `refusal` to `transaction did not target Veya.sol — not a VEYA proof`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
+**What you get back.** On a completed call, the proof JSON from `@veyanet/sdk`: `ok`, `mode` (`digest`, `verified`, `anchored`, or `refused`), `inputKind` (`text`, `json`, or `tx`), `digestHex`, `anchored`, `network`, `contractAddress`, `txHash`, `explorerUrl`, `event`, `blockNumber`, `refusal`. A refusal sets MCP `isError`. A receipt with no VEYA log and a receipt that called a different contract both return that full object. The second one sets `refusal` to `transaction did not target Veya.sol — not a VEYA proof`. Passing zero or two of `text` / `json` / `txHash`, or a `json` string that is not JSON, returns `isError` with `{ "ok": false, "mode": "refused", "anchored": false, "refusal" }`.
 
 ---
 
@@ -700,7 +700,7 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 
 **Arguments.** `apiKey` (your VEYA product API key), `solanaPrivateKey` (your Solana secret key, base58 or a JSON array of 64 numbers), `robinhoodPrivateKey` (your Robinhood Chain key, `0x` + 64 hex), `taskId`, `idempotencyKey` (8–120 chars, per account; use a new random value such as a UUID per call, and reuse it only to retry), `input` (object of strings), optional `resourceId`, `taskBudgetAtomic`, `environmentUuid` (default: the one `veya_paid_discover` shows), `url` (gate testing only). No other arguments: unknown ones (including the old `payerPrivateKey`) return `INPUT_INVALID`.
 
-**Before anything else.** Kill switch on: `state: "disabled"`. No `apiKey`: `API_KEY_REQUIRED`; unknown, revoked or guest key: `API_KEY_INVALID`. No Solana key: `SOLANA_KEY_REQUIRED`; malformed: `SOLANA_KEY_INVALID`. No Robinhood Chain key: `ROBINHOOD_KEY_REQUIRED`; malformed: `ROBINHOOD_KEY_INVALID`. In these cases no run is created and nothing is paid. After the policy gate and still before signing: `ENVIRONMENT_NOT_FOUND`, `ROBINHOOD_INSUFFICIENT_GAS`, `PAYER_INSUFFICIENT_FUNDS`.
+**Before anything else.** Kill switch on: `state: "disabled"`. No `apiKey`: `API_KEY_REQUIRED`; unknown, revoked or guest key: `API_KEY_INVALID`. No Solana key: `SOLANA_KEY_REQUIRED`; malformed: `SOLANA_KEY_INVALID`. No Robinhood Chain key: `ROBINHOOD_KEY_REQUIRED`; malformed: `ROBINHOOD_KEY_INVALID`. In these cases no run is created and nothing is spent. After the policy gate and still before signing: `ENVIRONMENT_NOT_FOUND`, `ROBINHOOD_INSUFFICIENT_GAS`, `PAYER_INSUFFICIENT_FUNDS`.
 
 **What you get back.** `runId`, `decision`, `state`, `reason`, `statuses { responseReceived, paymentVerified, veyaRecordAnchored }`, `payment { signature, solscan, feeSignature }`, `validators { agreed, required, total, reached }`, `veya { commitment, tx, blockscout, anchor, from }`, `receipt`, `account { saved }`, `output`. The same `idempotencyKey` again returns the stored run with `replay: true` and never pays twice.
 
