@@ -6,9 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.2.11] — 2026-10-30
+
+Version, dependency, wording and documentation release. No tool, schema or behaviour changes since 1.2.10: the server still lists 51 tools, or 54 with the Metered Call Guard on. Some tool descriptions and error message texts are reworded (see Changed); their codes are the same.
+
+### Changed
+- Package version **1.2.11** in `package.json` (`MCP_SERVICE_VERSION`, so `/health` and the landing page report 1.2.11), the config tests, the README badge and the docs (`ARCHITECTURE.md`, `CONFIGURATION.md`, `DEPLOYMENT.md`, `TRANSPORT.md`, `docs/README.md`).
+- `@veyanet/sdk` dependency moved from `1.2.9` to **`1.2.11`** (exact pin). The SDK has no code changes between those versions. The `pins.veyaSdk` value in `config/paid-calls.json` and the pin list in `docs/PAID_CALLS.md` match.
+- `package.json` has a `prepack` script (`npm run build`), so `npm pack` and `npm publish` from a clean checkout always include the compiled `dist/`.
+- Public wording. The opt-in x402 feature is now called **Metered Call Guard** in the docs, README, CHANGELOG, landing page, receipt page and tool descriptions. The operator's own chain wallet is called the **host signer**. Wording such as "decentralized" and "independent" for the validator checks is replaced with "distributed" and "separate". Tool names (`veya_paid_*`), the receipt path `/receipts/paid/…`, environment variables (`VEYA_PAID_*`, `*_RELAYER_*`), config keys, JSON fields (such as `operatorRelayerWrites`) and the `paid` run state are unchanged. Docs anchors changed with the headings (for example `#7-metered-call-guard`).
+- Refusal reasons that ended "Nothing was signed or paid." now end "… or spent." The daily seal limit errors now say "host-signer sends" and the `payerPrivateKey required` error says "not the hosted signer". Error codes are unchanged.
+- `docs/TOOLS.md` (`veya_api_health`): the product API `/health` no longer shows the host signer address, the chain id or the RPC URL. A low receipt balance shows in `notices` and does not make `status` `degraded`. This matches the API server shipped alongside this release.
+- `src/config.test.ts` and `scripts/verify-live-workflow.ts` sent an old `clientInfo` version (`1.2.0`, `1.2.1`); they now send `1.2.11`. Test and script only.
+- A test fixture in `src/paid/callerPayer.test.ts` now uses an obviously fake placeholder string in place of a real-format Solana key string. Test only; nothing ships differently.
+
+### Fixed
+- `docs/SDK_BRIDGE.md`, `docs/ARCHITECTURE.md` and `docs/README.md` said the SDK dependency was the caret range `^1.2.9`. `package.json` pins an exact version; the docs now say `1.2.11` (exact pin).
+- `docs/CONFIGURATION.md` and `docs/PAID_CALLS.md` now document `VEYA_PAID_SPONSORED_KEYS`, `VEYA_PAID_SOLANA_KEY_PATH` and `VEYA_PAID_ANCHOR_KEY_PATH`, which the code reads but no page described. The line "the server needs no wallet for metered calls" now says this holds only when `VEYA_PAID_SPONSORED_KEYS` is empty.
+- `docs/CONFIGURATION.md` now documents `VEYA_SEAL_DECISION_RELAYER` (off by default), `VEYA_SEAL_DECISION_DAILY_CAP` (default `20`), `VEYA_SEAL_DECISION_GLOBAL_DAILY_CAP` (default `100`) and `VEYA_CAPACITY_PER_MINUTE` (default `30`). Before this, they appeared only in `.env.example` or not at all.
+- `docs/CONFIGURATION.md`: the host signer rows now say which variable each network reads (`VEYA_MAINNET_RELAYER_PRIVATE_KEY` on Mainnet, `VEYA_RELAYER_PRIVATE_KEY` or `VEYA_DEPLOYER_PRIVATE_KEY` on Testnet), matching `src/config.ts`.
+- `docs/DEPLOYMENT.md` Testnet example set `ROBINHOOD_MAINNET_RPC_URL` to the Mainnet RPC. It now sets `ROBINHOOD_RPC_URL` to the Testnet RPC, which is what the Testnet profile reads.
+- `docs/QUICKSTART.md`: Step 4 says the example hash is a Testnet receipt, and the SDK snippet says to save it as `ping.mts` (top-level `await`).
+- `npm run smoke` (`scripts/smoke.ts`) failed on 1.2.10 because it expected a Testnet chain id in the `veya_describe` and `veya_ping_chain` replies, which no longer carry it. It now checks that both replies carry the configured protocol contract (and a block number for `veya_ping_chain`), and passes on Mainnet and Testnet. Script only; the tools are unchanged.
+
+---
+
 ## [1.2.10] — 2026-10-25
 
-This release completes the Paid Call Guard introduced in 1.2.9: every run is tied to a VEYA account, the caller signs with their own Solana and Robinhood Chain keys, and every refusal now has one stable, machine-readable shape.
+This release completes the Metered Call Guard introduced in 1.2.9: every run is tied to a VEYA account, the caller signs with their own Solana and Robinhood Chain keys, and every refusal now has one stable, machine-readable shape.
 
 ### Added
 - **Account-bound runs.** `veya_paid_call` accepts `apiKey` (a VEYA product API key). The key is validated against the VEYA API before anything is signed, and every run (state, payment, validator result, Robinhood Chain record and receipt link) is saved to that account. Request input, provider answers and keys are never saved.
@@ -21,7 +46,7 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 - Optional `environmentUuid` on `veya_paid_call` to record under your own `Veya.sol` environment; the default is shown by `veya_paid_discover` as `defaultEnvironmentUuid`.
 - Replies include `veya.from` (the address that signed the record), `account.saved`, `validators` (`agreed`, `required`, `total`, `reached`) and `veya.anchor` (`anchored`, `failed`, `pending`, `not_attempted`).
 - The policy config now ships in the package as `config/paid-calls.json` (allowlists, pins, caps; no secrets). Validator endpoints are supplied through `VEYA_PAID_VALIDATOR_NODES`.
-- Paid Call Guard section and FAQ entry on the MCP landing page and the browser view of `/mcp`.
+- Metered Call Guard section and FAQ entry on the MCP landing page and the browser view of `/mcp`.
 - Receipts show the paying wallet's public address.
 - New test suites for account mode, caller-signed payments, refusal shape, limits and receipt privacy.
 
@@ -55,7 +80,7 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 ## [1.2.9] — 2026-10-25
 
 ### Added
-- **Paid Call Guard** (opt-in, `VEYA_PAID_CALLS=1`). Three tools: `veya_paid_discover` (read-only quote and policy preview), `veya_paid_call` (one guarded call) and `veya_paid_run` (read or resume a run; never pays). An agent calls an x402 resource under a fixed VEYA policy: tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold and input are checked before anything is signed. Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
+- **Metered Call Guard** (opt-in, `VEYA_PAID_CALLS=1`). Three tools: `veya_paid_discover` (read-only quote and policy preview), `veya_paid_call` (one guarded call) and `veya_paid_run` (read or resume a run; never pays). An agent calls an x402 resource under a fixed VEYA policy: tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold and input are checked before anything is signed. Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
 - Two payer paths, chosen per provider or resource in `config/paid-calls.json`: `xpay-sdk` (xPay SDK `use()` with its guardrails) and `x402-exact` (standard x402 `exact` client).
 - Evidence: the Solana payment is verified at `finalized` (payer, payee, mint, amount), 3 validator nodes on separate RPC providers sign the evidence with ML-DSA-44 (2 of 3 must agree), and a commitment is anchored on `Veya.sol` with `storeCommitment`.
 - Receipt route `GET /receipts/paid/:runId` (HTML) and `/receipts/paid/:runId.json`. Public fields only, with no request input or answer.
@@ -105,7 +130,7 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 ## [1.2.7] — 2026-10-02
 
 ### Added
-- `ROBINHOOD_NETWORK=mainnet` selects the guard profile:, mainnet RPC, mainnet explorer, and `VEYA_MAINNET_RELAYER_PRIVATE_KEY` only. The testnet relayer key is not read on that profile. Default stays testnet. An explicit empty contract still sends nothing. The deployed address is recorded in Unreleased above.
+- `ROBINHOOD_NETWORK=mainnet` selects the guard profile:, mainnet RPC, mainnet explorer, and `VEYA_MAINNET_RELAYER_PRIVATE_KEY` only. The testnet host signer key is not read on that profile. Default stays testnet. An explicit empty contract still sends nothing. The deployed address is recorded in Unreleased above.
 - `veya_seal_decision`: an evidence id and a decision JSON object. The sealed runtime runs first. If it does not answer, the tool returns `SEALED_UNREACHABLE` and sends nothing. If it answers, a 2-of-3 ML-DSA quorum follows. `attestExecution` is sent when the call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1` and the host holds `VEYA_RELAYER_PRIVATE_KEY`. With that switch off and no payer key, the sealed result and the quorum are returned and nothing is sent. A refusal sets MCP `isError`.
 - Depends on `@veyanet/sdk` ^1.2.8 for that call.
 - Service version, health `version`, and `veya_describe` report **1.2.7**.
@@ -170,7 +195,7 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 - Depends on `@veyanet/sdk@^1.2.2` so write failures align with SDK `UNFUNDED_PAYER` / `NO_TESTNET_TOKENS` and faucet export.
 - Service version, health `version`, README badges, and `veya_describe` report **1.2.1**.
 - Write tools stay own-wallet: gated on product API keys; empty or unfunded payer returns exactly `You don't have testnet tokens. Please get them for the transaction.`
-- Health / HTTP honesty fields distinguish own-wallet writes from operator relayer writes (`writesEnabled`, `operatorRelayerWrites`).
+- Health / HTTP honesty fields distinguish own-wallet writes from operator host signer writes (`writesEnabled`, `operatorRelayerWrites`).
 - Docs refreshed across architecture, auth, configuration, deployment, network pin, quickstart, SDK bridge, tools, transport, and verification for the 1.2.x public paste path.
 - Smoke script and config tests cover unfunded-payer mapping and the 1.2.1 health version.
 
@@ -183,7 +208,7 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 
 ### Changed
 - Product tools take `apiKey` (`veya_dev_` / `veya_live_`) and forward `X-Api-Key` to `https://api.veyanet.tech`.
-- On-chain writes are **own-wallet**: `msg.sender` is the caller's wallet (`payerPrivateKey` / `VEYA_PAYER_PRIVATE_KEY`), not a hosted relayer.
+- On-chain writes are **own-wallet**: `msg.sender` is the caller's wallet (`payerPrivateKey` / `VEYA_PAYER_PRIVATE_KEY`), not a hosted signer.
 - Empty or unfunded payer returns exactly: `You don't have testnet tokens. Please get them for the transaction.`
 - Guest JWT is listing-only from MCP. Writes require a product API key minted after wallet login.
 - `veya_anchor_proof` uses SDK `storeCommitment` from the user wallet.
@@ -205,7 +230,7 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 
 ### Added
 - Full public tool surface: PQ crypto, fleet/sealed/coordination, local memory, public registry + on-chain reads, product API session tools (guest login, environments, agents, proofs, Boundnet).
-- On-chain write helpers: `veya_register_pq_onchain`, `veya_anchor_pq_attestation` (still Bearer + relayer gated).
+- On-chain write helpers: `veya_register_pq_onchain`, `veya_anchor_pq_attestation` (still Bearer + host signer gated).
 - Config: `VEYA_VALIDATOR_NODES`, `VEYA_SEALED_NODE_URL` for server-side fleet (backend/API-owned in production).
 
 ### Changed
@@ -220,11 +245,11 @@ This release completes the Paid Call Guard introduced in 1.2.9: every run is tie
 - **Canonical Package Release**: Official `@veyanet/mcp` Streamable HTTP Model Context Protocol server for VEYA on Robinhood Chain.
 - **Public MCP URL**: Production paste endpoint `https://mcp.veyanet.tech/mcp` with landing `/` and honesty `/health`.
 - **Public Tools**: `veya_describe`, `veya_ping_chain`, `veya_hash_blake3`, `veya_verify_transaction`, `veya_api_health`, and `veya_writes_status` when writes are disabled.
-- **Authenticated Write Tools**: `veya_store_commitment`, `veya_attest_execution`, `veya_register_environment` gated by `MCP_API_KEY` + relayer private key and Bearer authorization.
+- **Authenticated Write Tools**: `veya_store_commitment`, `veya_attest_execution`, `veya_register_environment` gated by `MCP_API_KEY` + host signer private key and Bearer authorization.
 - **SDK Bridge**: All chain crypto/verify/write paths delegate to `@veyanet/sdk` (`VeyaClient` / `EvmAnchor`) with guards on writes.
 - **Documentation Suite**: Publish-grade README (SDK-parity structure) plus `docs/` hub covering network pins, quickstart, architecture, tools, verification, deployment, configuration, transport, authentication, and SDK bridge.
 - **Operator Scripts**: `npm test` (config + `/health` honesty) and `npm run smoke` (live initialize + tool calls).
-- **Security Policy**: Coordinated disclosure via `security@veyanet.tech`; secrets hygiene for `.env` / Bearer / relayer keys.
+- **Security Policy**: Coordinated disclosure via `security@veyanet.tech`; secrets hygiene for `.env` / Bearer / host signer keys.
 
 ### Security
 - Fail-closed writes when keys unset or Bearer mismatches.
