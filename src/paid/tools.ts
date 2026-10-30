@@ -1,7 +1,7 @@
 /**
  * Agent-facing surface. Exactly three tools:
  *  - veya_paid_discover  (read-only; unpaid 402 quote + policy preview; cannot pay)
- *  - veya_paid_call      (one paid call, only through the VEYA policy gate)
+ *  - veya_paid_call      (one metered call, only through the VEYA policy gate)
  *  - veya_paid_run       (read run status / resume verification and anchoring; never pays)
  * veya_paid_call takes the caller's OWN Solana key (solanaPrivateKey) for that one call. It is used in memory
  * only, never stored, logged or echoed, and zeroed after the call. No transfer/swap/trade/do() tool is registered.
@@ -21,7 +21,7 @@ import { anchorPreflight } from "./anchor.js";
 import { parseRobinhoodKey, RobinhoodKeyError } from "./robinhoodKey.js";
 import { parseSponsoredKeys, SponsorLedger, type SponsoredEntry } from "./sponsored.js";
 
-export const API_KEY_REQUIRED_REASON = "API_KEY_REQUIRED: pass your VEYA product API key (veya_dev_... or veya_live_...) in the apiKey argument. Create one at https://app.veyanet.tech (System -> API Keys). Nothing was checked, signed or paid.";
+export const API_KEY_REQUIRED_REASON = "API_KEY_REQUIRED: pass your VEYA product API key (veya_dev_... or veya_live_...) in the apiKey argument. Create one at https://app.veyanet.tech (System -> API Keys). Nothing was checked, signed or spent.";
 import { createCaller } from "./payer.js";
 import { createAnchorer } from "./anchor.js";
 import { evaluatePolicy, probeChallenge } from "./policy.js";
@@ -119,7 +119,7 @@ export function paidCallsStatus(): Record<string, unknown> {
       resources: cfg.resources.map((r) => r.id), paymentNetwork: "Solana mainnet (USDC)", recordNetwork: cfg.robinhood.network,
       validators: `${cfg.validators.threshold} of ${cfg.validators.nodes.length}`, receipts: "/receipts/paid/<runId>", receiptsNote: RECEIPT_NOTE,
     };
-  } catch (e) { return { enabled: false, error: "paid call config not loaded" }; }
+  } catch (e) { return { enabled: false, error: "metered call config not loaded" }; }
 }
 
 const solanaKeyBase = z.string().max(1024)
@@ -142,16 +142,16 @@ export class AccountError extends Error {}
 export function httpAccountApi(svc: McpServiceConfig = loadConfig()): AccountApi {
   const call = async (apiKey: string, path: string, method = "GET", body?: unknown) => {
     try { return await apiRequest(svc, path, { apiKey, method, body }); }
-    catch (e) { throw new AccountError(`API_UNAVAILABLE: the VEYA account API could not be reached (${safeRequestMessage(e)}). Nothing was signed or paid.`); }
+    catch (e) { throw new AccountError(`API_UNAVAILABLE: the VEYA account API could not be reached (${safeRequestMessage(e)}). Nothing was signed or spent.`); }
   };
   return {
     async account(apiKey) {
-      if (!isProductApiKey(apiKey)) throw new AccountError("API_KEY_INVALID: apiKey must be a VEYA product API key (veya_dev_... or veya_live_...). Create one at https://app.veyanet.tech (System -> API Keys). Nothing was signed or paid.");
+      if (!isProductApiKey(apiKey)) throw new AccountError("API_KEY_INVALID: apiKey must be a VEYA product API key (veya_dev_... or veya_live_...). Create one at https://app.veyanet.tech (System -> API Keys). Nothing was signed or spent.");
       const r = await call(apiKey, "/v1/account");
       const b = r.body as { wallet?: string; accountId?: string; isGuest?: boolean };
-      if (r.httpStatus === 401 || r.httpStatus === 403) throw new AccountError("API_KEY_INVALID: this apiKey was rejected (unknown or revoked). Nothing was signed or paid.");
-      if (r.httpStatus >= 400 || !b?.accountId || !b.wallet) throw new AccountError(`API_UNAVAILABLE: the VEYA account API answered HTTP ${r.httpStatus}. Nothing was signed or paid.`);
-      if (b.isGuest) throw new AccountError("API_KEY_INVALID: guest sessions cannot make paid calls. Use a product API key. Nothing was signed or paid.");
+      if (r.httpStatus === 401 || r.httpStatus === 403) throw new AccountError("API_KEY_INVALID: this apiKey was rejected (unknown or revoked). Nothing was signed or spent.");
+      if (r.httpStatus >= 400 || !b?.accountId || !b.wallet) throw new AccountError(`API_UNAVAILABLE: the VEYA account API answered HTTP ${r.httpStatus}. Nothing was signed or spent.`);
+      if (b.isGuest) throw new AccountError("API_KEY_INVALID: guest sessions cannot make metered calls. Use a product API key. Nothing was signed or spent.");
       return { accountId: b.accountId, wallet: b.wallet };
     },
     async saveRun(apiKey, run) {
@@ -230,7 +230,7 @@ export function registerPaidCallTools(server: McpServer, guard: PaidCallGuard = 
       return json({ disabled: guard.disabled(), killSwitch: guard.disabled() ? "on" : "off", killSwitchNote: KILL_SWITCH_NOTE, limits: amountLimits(cfg), receiptsNote: RECEIPT_NOTE, runsPrivacy: RUNS_NOTE, requires: ["apiKey", "solanaPrivateKey (USDC)", "robinhoodPrivateKey (ETH gas for the record)"], defaultEnvironmentUuid: cfg.robinhood.environmentUuid, resources: out });
     });
 
-  server.tool("veya_paid_call", "Run one paid x402 resource call through the VEYA policy gate. Needs your VEYA apiKey, your Solana key (solanaPrivateKey, pays the USDC) and your Robinhood Chain key (robinhoodPrivateKey, signs the VEYA record and pays its ETH gas). Keys are used in memory for this call only and never stored. Before anything is signed VEYA checks the apiKey, both keys, your USDC and ETH balances, and the policy (tool, host, resource, network, asset, payee, per-call cap, task budget, input). It then pays, verifies the Solana payment at finalized, runs a 2-of-3 validator check, records a commitment on Robinhood Chain from your address and saves the run to your VEYA account. Every refusal returns decision blocked, a stable code and payment: null. The kill switch is operator-only; callers cannot change it. Allow at least 120 s for the tool call timeout.",
+  server.tool("veya_paid_call", "Run one metered x402 resource call through the VEYA policy gate. Needs your VEYA apiKey, your Solana key (solanaPrivateKey, pays the USDC) and your Robinhood Chain key (robinhoodPrivateKey, signs the VEYA record and pays its ETH gas). Keys are used in memory for this call only and never stored. Before anything is signed VEYA checks the apiKey, both keys, your USDC and ETH balances, and the policy (tool, host, resource, network, asset, payee, per-call cap, task budget, input). It then pays, verifies the Solana payment at finalized, runs a 2-of-3 validator check, records a commitment on Robinhood Chain from your address and saves the run to your VEYA account. Every refusal returns decision blocked, a stable code and payment: null. The kill switch is operator-only; callers cannot change it. Allow at least 120 s for the tool call timeout.",
     {
       apiKey: apiKeyArg,
       taskId: z.string().min(1).max(80).describe("Your task id. Calls with the same taskId share one task budget (per VEYA account)."),
@@ -239,13 +239,13 @@ export function registerPaidCallTools(server: McpServer, guard: PaidCallGuard = 
       input: z.record(z.string()).describe("Input fields for the resource, exactly as listed by veya_paid_discover (string values only)."),
       taskBudgetAtomic: z.string().regex(/^\d+$/).optional().describe("Optional task budget in USDC atomic units (6 decimals, 10000 = 0.01 USDC). Defaults to the policy budget; cannot exceed the policy maximum."),
       url: z.string().optional().describe("Optional. Normally omit it and use resourceId; any URL outside the allowlist is blocked before payment."),
-      environmentUuid: z.string().regex(/^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$/).optional().describe("Optional VEYA environment on Veya.sol to record under (yours, from veya_register_environment). Defaults to the VEYA paid-call environment shown by veya_paid_discover."),
+      environmentUuid: z.string().regex(/^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$/).optional().describe("Optional VEYA environment on Veya.sol to record under (yours, from veya_register_environment). Defaults to the VEYA metered-call environment shown by veya_paid_discover."),
       solanaPrivateKey: solanaArg,
       robinhoodPrivateKey: robinhoodArg,
     },
     async ({ apiKey, taskId, idempotencyKey, resourceId, input, taskBudgetAtomic, url, environmentUuid, solanaPrivateKey, robinhoodPrivateKey }) => {
       const off = guard.disabled();
-      if (off) return blocked("disabled", "EMERGENCY_DISABLED: paid calls are switched off on this server by the operator. Nothing was checked, signed or paid.");
+      if (off) return blocked("disabled", "EMERGENCY_DISABLED: metered calls are switched off on this server by the operator. Nothing was checked, signed or spent.");
       let payer: ParsedPayer | undefined; let rh: { key: string; address: string } | undefined;
       try {
         if (solanaPrivateKey) payer = await parsePayerKey(solanaPrivateKey);
@@ -254,12 +254,12 @@ export function registerPaidCallTools(server: McpServer, guard: PaidCallGuard = 
         payer?.secret.fill(0);
         // Fixed messages only: a key never appears in an error.
         const m = e instanceof PayerKeyError || e instanceof RobinhoodKeyError ? e.message : "KEY_INVALID";
-        return blocked(m.startsWith("ROBINHOOD") ? "robinhood_key_invalid" : "solana_key_invalid", m + " Nothing was checked, signed or paid.");
+        return blocked(m.startsWith("ROBINHOOD") ? "robinhood_key_invalid" : "solana_key_invalid", m + " Nothing was checked, signed or spent.");
       }
       try {
         let acct: { accountId: string };
         try { acct = await accounts.account(apiKey); }
-        catch (e) { return blocked("api_key_invalid", e instanceof AccountError ? e.message : "API_UNAVAILABLE: account check failed. Nothing was signed or paid."); }
+        catch (e) { return blocked("api_key_invalid", e instanceof AccountError ? e.message : "API_UNAVAILABLE: account check failed. Nothing was signed or spent."); }
         const keyId = apiKeyId(apiKey);
         const sponsor = !payer && !rh && keyId ? sponsors.get(keyId) : undefined;
         const env = environmentUuid ? normUuid(environmentUuid) : cfg.robinhood.environmentUuid;
@@ -296,7 +296,7 @@ export function registerPaidCallTools(server: McpServer, guard: PaidCallGuard = 
     async ({ apiKey, runId, resume, robinhoodPrivateKey }) => {
       let rh: { key: string; address: string } | undefined;
       try { if (robinhoodPrivateKey) rh = parseRobinhoodKey(robinhoodPrivateKey); }
-      catch (e) { return blocked("robinhood_key_invalid", (e instanceof RobinhoodKeyError ? e.message : "ROBINHOOD_KEY_INVALID") + " Nothing was signed or paid."); }
+      catch (e) { return blocked("robinhood_key_invalid", (e instanceof RobinhoodKeyError ? e.message : "ROBINHOOD_KEY_INVALID") + " Nothing was signed or spent."); }
       let acct: { accountId: string };
       try { acct = await accounts.account(apiKey); }
       catch (e) { return blocked("api_key_invalid", e instanceof AccountError ? e.message : "API_UNAVAILABLE"); }
@@ -347,7 +347,7 @@ export function unknownPaidArgs(tool: string, args: unknown): string | null {
   if (args === undefined || args === null) return null;
   if (typeof args !== "object" || Array.isArray(args)) return "INPUT_INVALID: arguments must be an object.";
   const extra = Object.keys(args).filter((k) => !allowed.includes(k)).length;
-  return extra ? `INPUT_INVALID: ${extra} unknown argument(s). Allowed: ${allowed.join(", ") || "none"}. Nothing was checked, signed or paid.` : null;
+  return extra ? `INPUT_INVALID: ${extra} unknown argument(s). Allowed: ${allowed.join(", ") || "none"}. Nothing was checked, signed or spent.` : null;
 }
 
 /**
@@ -364,9 +364,9 @@ function enforceStrictPaidArgs(server: McpServer, keyRequired: boolean, killSwit
     // Clear answers instead of the SDK's generic schema error when a required credential is missing.
     const n = req?.params?.name; const a = req?.params?.arguments ?? {};
     const miss = (state: string, reason: string) => ({ content: [{ type: "text", text: JSON.stringify(refused(state, reason), null, 2) }] });
-    if (n === "veya_paid_call" && killSwitchOn()) return miss("disabled", "EMERGENCY_DISABLED: paid calls are switched off on this server by the operator. Nothing was checked, signed or paid.");
+    if (n === "veya_paid_call" && killSwitchOn()) return miss("disabled", "EMERGENCY_DISABLED: metered calls are switched off on this server by the operator. Nothing was checked, signed or spent.");
     if ((n === "veya_paid_call" || n === "veya_paid_run") && !a.apiKey) return miss("api_key_required", API_KEY_REQUIRED_REASON);
-    if (n === "veya_paid_call" && (a.input === undefined || a.input === null)) return miss("input_invalid", "INPUT_INVALID: input is required. Pass the fields listed by veya_paid_discover. Nothing was checked, signed or paid.");
+    if (n === "veya_paid_call" && (a.input === undefined || a.input === null)) return miss("input_invalid", "INPUT_INVALID: input is required. Pass the fields listed by veya_paid_discover. Nothing was checked, signed or spent.");
     if (keyRequired && n === "veya_paid_call" && !a.solanaPrivateKey) return miss("payer_required", PAYER_REQUIRED_REASON);
     if (keyRequired && n === "veya_paid_call" && !a.robinhoodPrivateKey) return miss("robinhood_key_required", ROBINHOOD_KEY_REQUIRED_REASON);
     const res: any = await inner(req, extra);
@@ -374,7 +374,7 @@ function enforceStrictPaidArgs(server: McpServer, keyRequired: boolean, killSwit
     const t = res?.isError && n in PAID_TOOL_ARGS ? String(res?.content?.[0]?.text ?? "") : "";
     if (/Input validation error/.test(t)) {
       const fields = [...t.matchAll(/ at ([A-Za-z0-9_.]+)/g)].map((m) => m[1]).filter((f, i, all) => all.indexOf(f) === i).slice(0, 10);
-      return { ...miss("input_invalid", `INPUT_INVALID: arguments do not match the tool schema${fields.length ? ` (${fields.join(", ")})` : ""}. Nothing was checked, signed or paid.`), isError: true };
+      return { ...miss("input_invalid", `INPUT_INVALID: arguments do not match the tool schema${fields.length ? ` (${fields.join(", ")})` : ""}. Nothing was checked, signed or spent.`), isError: true };
     }
     return res;
   };
