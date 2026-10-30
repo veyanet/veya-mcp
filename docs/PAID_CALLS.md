@@ -1,6 +1,6 @@
-# Paid Call Guard — `@veyanet/mcp`
+# Metered Call Guard — `@veyanet/mcp`
 
-Paid Call Guard lets an agent call a paid x402 resource through one guarded VEYA tool. VEYA checks the call against a fixed policy **before** anything is signed, pays exactly the quote it approved, checks the payment on Solana at `finalized`, has three validators sign the evidence (2 of 3 must agree), and anchors a commitment on Robinhood Chain. Every run gets a receipt with proof links.
+Metered Call Guard lets an agent call a metered x402 resource through one guarded VEYA tool. VEYA checks the call against a fixed policy **before** anything is signed, pays exactly the quote it approved, checks the payment on Solana at `finalized`, has three validators sign the evidence (2 of 3 must agree), and anchors a commitment on Robinhood Chain. Every run gets a receipt with proof links.
 
 **Your account, your wallets.** Every `veya_paid_call` needs three values:
 
@@ -12,7 +12,7 @@ Before anything is signed VEYA checks the API key, that both keys parse, the pol
 
 The feature is enabled per server with `VEYA_PAID_CALLS=1`. When it is not `1`, the three tools and the receipt route do not exist and the server behaves exactly as described in [TOOLS.md](./TOOLS.md). Check `/health` or `veya_describe` (`paidCallGuard.enabled`) to see whether a server has it on.
 
-**[Tools](./TOOLS.md#7-paid-call-guard)** • **[Architecture](./ARCHITECTURE.md#18-paid-call-guard)** • **[Configuration](./CONFIGURATION.md#11-paid-call-guard)** • **[Verification](./VERIFICATION.md#9-procedure-e--paid-call-guard-runs)**
+**[Tools](./TOOLS.md#7-metered-call-guard)** • **[Architecture](./ARCHITECTURE.md#18-metered-call-guard)** • **[Configuration](./CONFIGURATION.md#11-metered-call-guard)** • **[Verification](./VERIFICATION.md#9-procedure-e--metered-call-guard-runs)**
 
 ---
 
@@ -42,7 +42,7 @@ The feature is enabled per server with `VEYA_PAID_CALLS=1`. When it is not `1`, 
 | Payment | Your Solana wallet (`solanaPrivateKey`), through the payer path from config | Exactly one payment for the one requirement VEYA approved. |
 | Payment check | VEYA | The Solana transaction is read at `finalized`: payer, payee, mint and amount must match. |
 | Validators | 3 validator nodes | Each node re-reads the payment through its **own** Solana RPC provider and signs the evidence with ML-DSA-44. 2 of 3 must agree. |
-| Record | Your Robinhood Chain wallet (`robinhoodPrivateKey`) | `storeCommitment` on `Veya.sol`, sent and paid by your address. |
+| Record | Your Robinhood Chain wallet (`robinhoodPrivateKey`) | `storeCommitment` on `Veya.sol`, sent and funded by your address. |
 | Account record | VEYA API | The run (state, payment, validators, record, receipt link; no input, answer or keys) is saved to your VEYA account. |
 | Receipt | VEYA | HTML and JSON receipt with the decision, three statuses and proof links. No request or answer content. |
 
@@ -56,7 +56,7 @@ A receipt is cross-chain evidence: the payment settles on Solana and the commitm
 sequenceDiagram
   participant A as Agent
   participant M as VEYA MCP
-  participant R as Paid resource
+  participant R as Metered resource
   participant S as Solana
   participant V as Validators (3)
   participant H as Robinhood Chain
@@ -65,11 +65,11 @@ sequenceDiagram
   M->>M: policy gate, USDC + ETH balance checks (before any signing)
   M->>R: unpaid request -> 402 quote
   M->>M: quote must equal the pinned requirement
-  M->>R: one paid request (approved requirement only)
+  M->>R: one metered request (approved requirement only)
   R-->>M: result + settlement
   M->>S: read payment at finalized
   M->>V: evidence -> 2 of 3 signatures
-  M->>H: storeCommitment (signed and paid by your Robinhood Chain key)
+  M->>H: storeCommitment (signed and funded by your Robinhood Chain key)
   M->>M: save the run to your VEYA account
   M-->>A: decision, state, statuses, proof links, receipt
 ```
@@ -81,7 +81,7 @@ sequenceDiagram
 | Tool | Pays | Purpose |
 |------|------|---------|
 | `veya_paid_discover` | Never | Lists the resources policy allows, their input fields, a live unpaid quote, a policy preview and the default `Veya.sol` environment. No key needed. |
-| `veya_paid_call` | Once per idempotency key | Runs one guarded paid call. |
+| `veya_paid_call` | Once per idempotency key | Runs one guarded metered call. |
 | `veya_paid_run` | Never | Lists the runs saved to your VEYA account, or reads one. With `resume: true` it retries Solana verification, the 2-of-3 validator check (`quorum_failed`) or anchoring, or looks for an on-chain payment after a resource error. |
 
 `veya_paid_call` arguments:
@@ -121,7 +121,7 @@ For each resource, `veya_paid_discover` also returns `amounts`: `providerQuoteAt
 
 `veya_paid_run` arguments: `apiKey` (required), `runId` (optional; omit it to list the runs saved to your account), `resume` (optional, `true` to continue a stopped run; never pays) and `robinhoodPrivateKey` (needed to resume a `commit_failed` run, because your key signs the record). A run that belongs to another VEYA account reads as `unknown run`. `veya_paid_run` is private to the account of the `apiKey` you pass: another key cannot list or read your runs.
 
-The order of checks is: kill switch, key format, API key (VEYA account), idempotent replay, policy gate, environment and ETH balance, USDC balance, then payment. A call refused at the key or API key step returns `decision: "blocked"` before anything is checked, signed or paid; no run is created and the idempotency key can be used again. Later refusals create a run (saved to your account) that shows the reason.
+The order of checks is: kill switch, key format, API key (VEYA account), idempotent replay, policy gate, environment and ETH balance, USDC balance, then payment. A call refused at the key or API key step returns `decision: "blocked"` before anything is checked, signed or spent; no run is created and the idempotency key can be used again. Later refusals create a run (saved to your account) that shows the reason.
 
 There is no transfer, swap, trade or bridge tool, and no tool returns a key.
 
@@ -142,7 +142,7 @@ Both paths pay only after the policy gate, and neither is retried automatically.
 
 ## 5. Policy
 
-Policy lives in the config file (see [CONFIGURATION.md](./CONFIGURATION.md#11-paid-call-guard)). Deny codes:
+Policy lives in the config file (see [CONFIGURATION.md](./CONFIGURATION.md#11-metered-call-guard)). Deny codes:
 
 | Code | Meaning |
 |------|---------|
@@ -157,13 +157,13 @@ Policy lives in the config file (see [CONFIGURATION.md](./CONFIGURATION.md#11-pa
 | `INPUT_INVALID` | Missing, unknown or malformed input field. |
 | `CHALLENGE_UNAVAILABLE` | The unpaid quote could not be read. |
 | `EMERGENCY_DISABLED` | Kill switch is on. |
-| `API_KEY_REQUIRED` / `API_KEY_INVALID` | No `apiKey`, or the key is malformed, unknown, revoked or a guest key. Nothing was signed or paid. |
-| `API_UNAVAILABLE` | The VEYA API could not be reached to check the key. Nothing was signed or paid. |
-| `SOLANA_KEY_REQUIRED` / `SOLANA_KEY_INVALID` | `solanaPrivateKey` missing or not a Solana secret key. Nothing was checked or paid. |
-| `ROBINHOOD_KEY_REQUIRED` / `ROBINHOOD_KEY_INVALID` | `robinhoodPrivateKey` missing or not a 32-byte hex key. Nothing was checked or paid. |
+| `API_KEY_REQUIRED` / `API_KEY_INVALID` | No `apiKey`, or the key is malformed, unknown, revoked or a guest key. Nothing was signed or spent. |
+| `API_UNAVAILABLE` | The VEYA API could not be reached to check the key. Nothing was signed or spent. |
+| `SOLANA_KEY_REQUIRED` / `SOLANA_KEY_INVALID` | `solanaPrivateKey` missing or not a Solana secret key. Nothing was checked or spent. |
+| `ROBINHOOD_KEY_REQUIRED` / `ROBINHOOD_KEY_INVALID` | `robinhoodPrivateKey` missing or not a 32-byte hex key. Nothing was checked or spent. |
 | `ENVIRONMENT_NOT_FOUND` | `environmentUuid` is not registered on `Veya.sol`. Refused before signing. |
 | `ROBINHOOD_INSUFFICIENT_GAS` | Your Robinhood Chain wallet holds too little ETH to record the run. Refused before signing. |
-| `PAYER_INSUFFICIENT_FUNDS` | Your Solana wallet holds less USDC than the call needs. Refused before signing; nothing was paid. |
+| `PAYER_INSUFFICIENT_FUNDS` | Your Solana wallet holds less USDC than the call needs. Refused before signing; nothing was spent. |
 | `IN_PROGRESS` | A call with the same `idempotencyKey` is still running (`decision: "pending"`). It will not pay again; read it with `veya_paid_run`. |
 
 Parallel calls on one task reserve budget first, so they cannot spend past it together.
@@ -197,7 +197,7 @@ Receipt links are public proof. Anyone with the link can open the HTML or JSON r
 
 ## 8. Set up
 
-Operators only. Callers of a hosted server skip this section. Deployment notes: [DEPLOYMENT.md](./DEPLOYMENT.md#13-optional-paid-call-guard).
+Operators only. Callers of a hosted server skip this section. Deployment notes: [DEPLOYMENT.md](./DEPLOYMENT.md#13-optional-metered-call-guard).
 
 1. Build the MCP (`npm ci && npm run build`).
 2. Point the server at the VEYA API (`VEYA_API_URL`); it checks each `apiKey` and stores runs there.
@@ -213,6 +213,8 @@ Operators only. Callers of a hosted server skip this section. Deployment notes: 
 | `VEYA_PAID_VALIDATOR_NODES` | yes with the bundled config | Comma-separated base URLs of the three validator nodes. |
 | `VEYA_PAID_CONFIG`, `VEYA_PAID_STATE_DIR`, `VEYA_PAID_RECEIPTS_DIR` | optional | Override default paths. |
 | `VEYA_PAID_CALLS_DISABLED` | emergency | `1` turns the kill switch on. |
+| `VEYA_PAID_SPONSORED_KEYS` | optional | `<apiKeyId>:<limitUsdc>[:<YYYY-MM-DD>]`, comma-separated key ids (never full keys). Those key ids may run calls on the server's own wallets up to the limit; wallet-key arguments then become optional in the schema. |
+| `VEYA_PAID_SOLANA_KEY_PATH`, `VEYA_PAID_ANCHOR_KEY_PATH` | with `VEYA_PAID_SPONSORED_KEYS` | Key files for the server's Solana payer and Robinhood Chain anchor wallet used for those key ids. |
 
 The policy config ships in the package at `config/paid-calls.json` (allowlists, pins, caps, validator RPCs; no secrets). It is used unless `VEYA_PAID_CONFIG` or `<VEYA_PAID_ROOT>/config/paid-calls.json` points to another file.
 
@@ -289,7 +291,7 @@ The operator turns it on with any one of these; each blocks every call before an
 - `VEYA_PAID_CALLS_DISABLED=1`
 - a file named `DISABLED` in the state folder
 
-A call made while the switch is on returns `decision: "blocked"`, `state: "disabled"`, `code: "EMERGENCY_DISABLED"` and `payment: null`. No run is created and nothing is paid.
+A call made while the switch is on returns `decision: "blocked"`, `state: "disabled"`, `code: "EMERGENCY_DISABLED"` and `payment: null`. No run is created and nothing is spent.
 
 To remove the feature, unset `VEYA_PAID_CALLS` and restart.
 
@@ -304,4 +306,4 @@ To remove the feature, unset `VEYA_PAID_CALLS` and restart.
 - One process per state folder. Budgets and idempotency are enforced per VEYA account within a state folder, not across folders.
 - Keys are JavaScript strings while a call runs. The Solana key bytes are zeroed after the call; other references are dropped and left to garbage collection.
 - The task budget is a USDC budget enforced by VEYA before payment. It is not an onchain limit. `Veya.sol` spend values are in Robinhood Chain native wei, so the commitment on Robinhood Chain is not a USD or USDC spend limit.
-- Pinned versions: xPay SDK 0.2.38, `@x402/core` and `@x402/svm` 2.28.0, `@veyanet/sdk` 1.2.9. The same pins are in `config/paid-calls.json` (`pins`) and `mcp/package.json`.
+- Pinned versions: xPay SDK 0.2.38, `@x402/core` and `@x402/svm` 2.28.0, `@veyanet/sdk` 1.2.11. The same pins are in `config/paid-calls.json` (`pins`) and `mcp/package.json`.
