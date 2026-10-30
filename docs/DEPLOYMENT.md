@@ -4,7 +4,7 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.2.10`
+**npm:** `@veyanet/mcp@1.2.11`
 
 Public users only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 
@@ -26,7 +26,7 @@ Public users only need that paste URL (and optionally `@veyanet/sdk`). This guid
 10. [Fleet on the same machine](#10-fleet-on-the-same-machine)
 11. [Secrets](#11-secrets)
 12. [Rollback](#12-rollback)
-13. [Optional: Paid Call Guard](#13-optional-paid-call-guard)
+13. [Optional: Metered Call Guard](#13-optional-metered-call-guard)
 
 ---
 
@@ -131,10 +131,10 @@ VEYA_API_URL=https://api.veyanet.tech
 # VEYA_MAINNET_CONTRACT_ADDRESS=0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674
 # Testnet is the option:
 # ROBINHOOD_NETWORK=testnet
-# ROBINHOOD_MAINNET_RPC_URL=https://rpc.mainnet.chain.robinhood.com
+# ROBINHOOD_RPC_URL=https://rpc.testnet.chain.robinhood.com
 # ROBINHOOD_EXPLORER_URL=https://explorer.testnet.chain.robinhood.com
 
-# Leave MCP_API_KEY and the relayer key empty on a public host
+# Leave MCP_API_KEY and the host signer key empty on a public host
 ```
 
 `HOST=<your-host>` is safer than `0.0.0.0` if the proxy sits on the same machine. Code default is `0.0.0.0` so Docker-style binds work; prefer loopback + proxy when you can.
@@ -212,10 +212,10 @@ Then connect a real MCP client and call `veya_describe` + `veya_ping_chain`. See
 
 | Host | Writes |
 |------|--------|
-| `mcp.veyanet.tech` | Own-wallet writes (product `apiKey` + **user** wallet). Hosted relayer off. |
+| `mcp.veyanet.tech` | Own-wallet writes (product `apiKey` + **user** wallet). Hosted signer off. |
 | Self-hosted MCP | Same, with `VEYA_PAYER_PRIVATE_KEY` in env so the key is not a tool argument |
 
-Do not put a hosted relayer key on the public URL. Guest listing still works. On-chain writes from MCP spend the user's ETH.
+Do not put a hosted signer key on the public URL. Guest listing still works. On-chain writes from MCP spend the user's ETH.
 
 ---
 
@@ -253,18 +253,18 @@ Related: [NETWORK_PIN.md](./NETWORK_PIN.md), [QUICKSTART.md](./QUICKSTART.md).
 
 ---
 
-## 13. Optional: Paid Call Guard
+## 13. Optional: Metered Call Guard
 
 Off unless `VEYA_PAID_CALLS=1`. When on:
 
 - The state folder (`VEYA_PAID_STATE_DIR`) must be on a persistent disk, writable by the MCP process. It holds the run ledger, the audit log, `ledger.lock` and the optional `DISABLED` flag. Run one MCP process per state folder; do not scale the paid tools across several processes that share one folder.
 - Three validator nodes must be reachable from the MCP (`VEYA_PAID_VALIDATOR_NODES`). Do not expose validator nodes publicly.
 - Set `VEYA_API_URL` to the VEYA API. It checks each caller's `apiKey` and stores runs; the API must include `/v1/paid-runs` (apply the backend Prisma schema with its `db:push` script after upgrading).
-- Callers pay with their own keys (`solanaPrivateKey`, `robinhoodPrivateKey`); the server holds no wallet for paid calls.
+- Callers pay with their own keys (`solanaPrivateKey`, `robinhoodPrivateKey`); the server holds no wallet for metered calls.
 - The policy config ships in the package (`config/paid-calls.json`); no extra file is needed.
 - `/health` reports `paidCallGuard` (enabled, kill switch, tools, `requires`, who pays, where runs are saved). It never shows keys or paths.
 - Expose `/mcp` and `/receipts/paid/*` through the reverse proxy.
 - Set `VEYA_PAID_RECEIPTS_BASE_URL` to the public receipt base.
 - Rollback: set `VEYA_PAID_CALLS_DISABLED=1`, or unset `VEYA_PAID_CALLS`, and restart. No contract change is involved.
 
-Env and config reference: [CONFIGURATION.md](./CONFIGURATION.md#11-paid-call-guard). Feature guide: [PAID_CALLS.md](./PAID_CALLS.md).
+Env and config reference: [CONFIGURATION.md](./CONFIGURATION.md#11-metered-call-guard). Feature guide: [PAID_CALLS.md](./PAID_CALLS.md).
