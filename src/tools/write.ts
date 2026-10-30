@@ -48,7 +48,7 @@ const payerPrivateKey = z
 export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_writes_status",
-    "Reports how on-chain writes work on this server: your own wallet sends them, the host relayer does not",
+    "Reports how on-chain writes work on this server: your own wallet sends them, the host signer does not",
     {},
     async () =>
       toolJson({
@@ -58,7 +58,7 @@ export function registerWriteTools(server: McpServer, cfg: McpServiceConfig): vo
           apiKey: "veya_dev_ or veya_live_ from the product site",
           payerPrivateKey: "your wallet; set VEYA_PAYER_PRIVATE_KEY or pass the tool argument",
         },
-        gasPayer: "The transaction is sent from the user's wallet, not the hosted relayer",
+        gasPayer: "The transaction is sent from the user's wallet, not the hosted signer",
         emptyWallet: noFundsMessage(cfg.network),
         faucetUrl: cfg.network === "testnet" ? ROBINHOOD_TESTNET_FAUCET_URL : undefined,
       }),
