@@ -39,9 +39,9 @@ export class SponsorLedger {
   used(id: string): bigint { const r = this.row(id); return BigInt(r.spentAtomic) + BigInt(r.reservedAtomic); }
   /** Synchronous check-and-reserve, so parallel calls cannot both pass the limit. */
   reserve(e: SponsoredEntry, amount: bigint, now = new Date()): { ok: true } | { ok: false; reason: string } {
-    if (e.expires && now > e.expires) return { ok: false, reason: "KEY_LIMIT_EXPIRED: this API key's call limit has expired. Pass your own solanaPrivateKey and robinhoodPrivateKey. Nothing was signed or paid." };
+    if (e.expires && now > e.expires) return { ok: false, reason: "KEY_LIMIT_EXPIRED: this API key's call limit has expired. Pass your own solanaPrivateKey and robinhoodPrivateKey. Nothing was signed or spent." };
     const used = this.used(e.keyId);
-    if (used + amount > e.limitAtomic) return { ok: false, reason: `KEY_LIMIT_REACHED: this API key's call limit is used up (${used} of ${e.limitAtomic} atomic USDC; this call needs ${amount}). Pass your own solanaPrivateKey and robinhoodPrivateKey. Nothing was signed or paid.` };
+    if (used + amount > e.limitAtomic) return { ok: false, reason: `KEY_LIMIT_REACHED: this API key's call limit is used up (${used} of ${e.limitAtomic} atomic USDC; this call needs ${amount}). Pass your own solanaPrivateKey and robinhoodPrivateKey. Nothing was signed or spent.` };
     const r = this.row(e.keyId); r.reservedAtomic = (BigInt(r.reservedAtomic) + amount).toString(); this.save();
     return { ok: true };
   }
