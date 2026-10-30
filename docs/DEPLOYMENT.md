@@ -257,7 +257,7 @@ Related: [NETWORK_PIN.md](./NETWORK_PIN.md), [QUICKSTART.md](./QUICKSTART.md).
 
 Off unless `VEYA_PAID_CALLS=1`. When on:
 
-- The state folder (`VEYA_PAID_STATE_DIR`) must be on a persistent disk, writable by the MCP process. It holds the run ledger, the audit log, `ledger.lock` and the optional `DISABLED` flag. Run one MCP process per state folder; do not scale the paid tools across several processes that share one folder.
+- The state folder (`VEYA_PAID_STATE_DIR`) must be on a persistent disk, writable by the MCP process. It holds the run ledger, the audit log, `ledger.lock` and the optional `DISABLED` flag. Run one MCP process per state folder; do not scale the metered tools across several processes that share one folder.
 - Three validator nodes must be reachable from the MCP (`VEYA_PAID_VALIDATOR_NODES`). Do not expose validator nodes publicly.
 - Set `VEYA_API_URL` to the VEYA API. It checks each caller's `apiKey` and stores runs; the API must include `/v1/paid-runs` (apply the backend Prisma schema with its `db:push` script after upgrading).
 - Callers pay with their own keys (`solanaPrivateKey`, `robinhoodPrivateKey`); the server holds no wallet for metered calls.
