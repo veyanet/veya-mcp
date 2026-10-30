@@ -27,7 +27,7 @@ Chain tools use the server profile. The default is **Mainnet**. `ROBINHOOD_NETWO
 7. [4. Public registry and on-chain reads](#4-public-registry-and-on-chain-reads)
 8. [5. Product API (apiKey)](#5-product-api-apikey)
 9. [6. On-chain write tools (your wallet)](#6-on-chain-write-tools-your-wallet)
-10. [7. Paid Call Guard](#7-paid-call-guard)
+10. [7. Metered Call Guard](#7-metered-call-guard)
 11. [Live facts](#live-facts)
 12. [Index of tool names](#index-of-tool-names)
 
@@ -56,7 +56,7 @@ If validators or sealed-node are down, consensus/sealed tools return a clear err
 
 `veya_writes_status` is always registered. It explains own-wallet writes. On Mainnet an empty wallet says `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` On Testnet it says `You don't have testnet tokens. Please get them for the transaction.`
 
-**51 tools** (writes always listed). **54 tools** when Paid Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-paid-call-guard).
+**51 tools** (writes always listed). **54 tools** when Metered Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-metered-call-guard).
 
 ---
 
@@ -179,7 +179,7 @@ With `anchor` true, the call also needs `apiKey`, `environmentId` for an environ
 
 **What it does.** One sealed decision. Pass `evidenceId` and `decision`. On Mainnet also pass `environmentId`, or set `VEYA_SEAL_DECISION_ENVIRONMENT_ID` on the host. Without either, the result is `SEAL_ENVIRONMENT_REQUIRED` and nothing is sent. Testnet uses environment `7d0af0ba-2ae3-4d0e-bc75-0bbaccb3dd71` when no id is passed. `decision` is a string that `JSON.parse` reads as an object. If the sealed node does not answer, the result is `code` `SEALED_UNREACHABLE`, `transaction` null, and `continuedOnOpenWorker` false. No transaction is sent.
 
-If the sealed node answers, the result carries the sealed fingerprint, `runtime` `AES-256-GCM`, and a 2-of-3 ML-DSA quorum. `attestExecution` is sent when `payerPrivateKey` is passed on that call. It is also sent when the host has `VEYA_SEAL_DECISION_RELAYER=1` and a relayer key, and the call omits `payerPrivateKey`. With the switch off and no payer key, `chain` is null and nothing is sent. The switch does not enable the host relayer for any other tool.
+If the sealed node answers, the result carries the sealed fingerprint, `runtime` `AES-256-GCM`, and a 2-of-3 ML-DSA quorum. `attestExecution` is sent when `payerPrivateKey` is passed on that call. It is also sent when the host has `VEYA_SEAL_DECISION_RELAYER=1` and a host signer key, and the call omits `payerPrivateKey`. With the switch off and no payer key, `chain` is null and nothing is sent. The switch does not enable the host signer for any other tool.
 
 **When to use it.** You have an evidence id and a decision object, and you want the sealed fingerprint, the quorum, and, when a payer is available, one `attestExecution` receipt.
 
@@ -226,7 +226,7 @@ If the sealed node answers, the result carries the sealed fingerprint, `runtime`
 
 **What you get back.** SDK verify JSON: typically parsed proofs, hashes, whether the receipt looks like a VEYA write. This is chain-receipt data (what landed on `Veya.sol`).
 
-**Example hash used in docs:**
+**Example hash used in docs (a Testnet receipt; on Mainnet use a Mainnet hash):**
 
 ```text
 0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8
@@ -238,17 +238,17 @@ If the sealed node answers, the result carries the sealed fingerprint, `runtime`
 
 **What it does.** `GET {VEYA_API_URL}/health` (default `https://api.veyanet.tech/health`). Returns HTTP status and body.
 
-**When to use it.** You care whether the **product API** (database, relayer, **validators**, **sealed**) is `ok` or **`degraded`**. Degraded usually means fleet down. MCP describe/ping can still work.
+**When to use it.** You care whether the **product API** (database, **validators**, **sealed**) is `ok` or **`degraded`**. Degraded means one of those is failing. A low receipt balance shows in `notices` and does not make it degraded. MCP describe/ping can still work.
 
 **Arguments.** None.
 
-**What you get back.** `{ httpStatus, body }` — body includes `status`, `validators.reachable`, `sealed.reachable`, Robinhood relayer block.
+**What you get back.** `{ httpStatus, body }` — body includes `status`, `notices`, `validators.reachable`, `sealed.reachable` and the `robinhood.anchor` readiness block.
 
 ---
 
 ## `veya_writes_status`
 
-**What it does.** Always registered. Explains that on-chain writes are **own-wallet**: product `apiKey` + your wallet. Does not use the hosted relayer.
+**What it does.** Always registered. Explains that on-chain writes are **own-wallet**: product `apiKey` + your wallet. Does not use the hosted signer.
 
 **When to use it.** Before a write, to confirm who pays gas.
 
@@ -511,7 +511,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 | `veya_run_protected_execution` | `POST /v1/environments/:id/executions/protected` |
 | `veya_boundnet_invoke` | `POST /v1/environments/:id/boundnet/invoke` |
 | `veya_list_proofs` | `GET /v1/proofs` |
-| `veya_anchor_proof` | Own-wallet `storeCommitment` (not the hosted relayer stamp) |
+| `veya_anchor_proof` | Own-wallet `storeCommitment` (not the hosted signer stamp) |
 | `veya_verify_proof_api` | `GET /api/verify/:signature` (no key) |
 
 ### Guest vs product key
@@ -622,7 +622,7 @@ Empty wallet: Mainnet: `Your wallet has no ETH on Robinhood Chain. Add funds and
 
 # 6. On-chain write tools (your wallet)
 
-Always registered. Every call needs a product `apiKey` and a funded `payerPrivateKey` (tool arg or `VEYA_PAYER_PRIVATE_KEY`). `msg.sender` is **your** address. The hosted relayer is not used.
+Always registered. Every call needs a product `apiKey` and a funded `payerPrivateKey` (tool arg or `VEYA_PAYER_PRIVATE_KEY`). `msg.sender` is **your** address. The hosted signer is not used.
 
 Empty wallet:
 
@@ -678,13 +678,13 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 ---
 
 
-# 7. Paid Call Guard
+# 7. Metered Call Guard
 
 **Auth: your VEYA API key and your own wallets.** These three tools exist when the server sets `VEYA_PAID_CALLS=1` (the hosted endpoint has them on; check `paidCallGuard.enabled` in `/health` or `veya_describe`). `veya_paid_call` needs your `apiKey` (runs are saved to that account), your Solana secret key in `solanaPrivateKey` (pays the USDC) and your Robinhood Chain key in `robinhoodPrivateKey` (signs the record and pays its gas). Keys are used in memory for that call only and never stored, logged or returned. `veya_paid_run` needs your `apiKey`. `veya_paid_discover` needs no key. A host may also require its MCP bearer token (`MCP_API_KEY`). Full guide: [PAID_CALLS.md](./PAID_CALLS.md).
 
 ## `veya_paid_discover`
 
-**What it does.** Lists the paid resources the host policy allows, with each resource's input fields, payer path, a live x402 quote (nothing is sent) and a policy preview. Also returns `limits` (per-call cap, largest total per call, task budget maximum and default, calls per task, all read from the policy config), `amounts` per resource (`providerQuoteAtomic`, `providerFeeAtomic`, `totalChargedAtomic` and a `note`; `tokens.risk-summary` adds the provider SDK's platform fee, so its total is twice its quote), the kill switch state, and notes on run privacy and receipts. Never pays.
+**What it does.** Lists the metered resources the host policy allows, with each resource's input fields, payer path, a live x402 quote (nothing is sent) and a policy preview. Also returns `limits` (per-call cap, largest total per call, task budget maximum and default, calls per task, all read from the policy config), `amounts` per resource (`providerQuoteAtomic`, `providerFeeAtomic`, `totalChargedAtomic` and a `note`; `tokens.risk-summary` adds the provider SDK's platform fee, so its total is twice its quote), the kill switch state, and notes on run privacy and receipts. Never pays.
 
 **When to use it.** Before `veya_paid_call`, to pick a `resourceId` and see which `input` fields it takes.
 
@@ -694,9 +694,9 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 
 ## `veya_paid_call`
 
-**What it does.** Runs one paid x402 call through the VEYA policy gate. Checks your API key, both keys, tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold, input, the `Veya.sol` environment, your ETH for gas and your USDC balance **before** anything is signed. Then pays the approved requirement once from your Solana wallet, verifies the payment at `finalized`, gets 2-of-3 validator signatures, anchors a commitment on Robinhood Chain from your address and saves the run to your VEYA account. Every refusal returns `decision: "blocked"`, a stable `code`, a `reason` and `payment: null`. A committed run's `reason` reads `Recorded on Robinhood Chain in block N, transaction 0x…`. The kill switch is operator-only; when it is on every call returns `code: "EMERGENCY_DISABLED"`.
+**What it does.** Runs one metered x402 call through the VEYA policy gate. Checks your API key, both keys, tool, host, resource, network, asset, payee, per-call cap, task budget, call count, approval threshold, input, the `Veya.sol` environment, your ETH for gas and your USDC balance **before** anything is signed. Then pays the approved requirement once from your Solana wallet, verifies the payment at `finalized`, gets 2-of-3 validator signatures, anchors a commitment on Robinhood Chain from your address and saves the run to your VEYA account. Every refusal returns `decision: "blocked"`, a stable `code`, a `reason` and `payment: null`. A committed run's `reason` reads `Recorded on Robinhood Chain in block N, transaction 0x…`. The kill switch is operator-only; when it is on every call returns `code: "EMERGENCY_DISABLED"`.
 
-**When to use it.** Your agent needs a paid resource and you want a policy check and a verifiable record of the call.
+**When to use it.** Your agent needs a metered resource and you want a policy check and a verifiable record of the call.
 
 **Arguments.** `apiKey` (your VEYA product API key), `solanaPrivateKey` (your Solana secret key, base58 or a JSON array of 64 numbers), `robinhoodPrivateKey` (your Robinhood Chain key, `0x` + 64 hex), `taskId`, `idempotencyKey` (8–120 chars, per account; use a new random value such as a UUID per call, and reuse it only to retry), `input` (object of strings), optional `resourceId`, `taskBudgetAtomic`, `environmentUuid` (default: the one `veya_paid_discover` shows), `url` (gate testing only). No other arguments: unknown ones (including the old `payerPrivateKey`) return `INPUT_INVALID`.
 
@@ -736,7 +736,7 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_hash_blake3` | Public | None |
 | `veya_verify_transaction` | Public | None |
 | `veya_prove` | Public read; anchor needs an API key and a payer | API key and payer key when `anchor` is true |
-| `veya_seal_decision` | Sealed decision; receipt when a payer is passed or the seal-decision relayer switch is on | API key; `payerPrivateKey` optional |
+| `veya_seal_decision` | Sealed decision; receipt when a payer is passed or the seal-decision host-signer switch is on | API key; `payerPrivateKey` optional |
 | `veya_api_health` | Public | None |
 | `veya_writes_status` | Writes | None |
 | `veya_pq_keygen` | Crypto | None |
@@ -782,9 +782,9 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_register_environment` | Writes | Key + payer |
 | `veya_register_pq_onchain` | Writes | Key + payer |
 | `veya_anchor_pq_attestation` | Writes | Key + payer |
-| `veya_paid_discover` | Paid Call Guard | None |
-| `veya_paid_call` | Paid Call Guard | `apiKey` + `solanaPrivateKey` + `robinhoodPrivateKey` |
-| `veya_paid_run` | Paid Call Guard | `apiKey` |
+| `veya_paid_discover` | Metered Call Guard | None |
+| `veya_paid_call` | Metered Call Guard | `apiKey` + `solanaPrivateKey` + `robinhoodPrivateKey` |
+| `veya_paid_run` | Metered Call Guard | `apiKey` |
 
 ## Related
 
@@ -793,5 +793,5 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — what is SDK vs API
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [QUICKSTART.md](./QUICKSTART.md) — first five minutes  
-- [PAID_CALLS.md](./PAID_CALLS.md) — Paid Call Guard (paid calls from your own wallet)
+- [PAID_CALLS.md](./PAID_CALLS.md) — Metered Call Guard (metered calls from your own wallet)
 - [TRANSPORT.md](./TRANSPORT.md) — tool policy is saved on the account
