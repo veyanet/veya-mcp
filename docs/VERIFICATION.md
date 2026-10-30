@@ -164,7 +164,7 @@ Keep these artifacts for diligence:
 | Check | Pass |
 |-------|------|
 | Describe sealed | AES-256-GCM |
-| Ping chain id | Same profile as health |
+| Ping `config.network` | Same network as health `network` |
 | Known tx verify | Parses `Veya.sol` events; explorer agrees |
 | Health `writesEnabled` | `true` (own-wallet tools registered); `operatorRelayerWrites` is `false` on the public host |
 | Guest Build from MCP | refused / mint product API key |
