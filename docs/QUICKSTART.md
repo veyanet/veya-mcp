@@ -16,7 +16,7 @@ From zero to a verified chain ping using **public** VEYA surfaces: the paste URL
 6. [Optional: run the HTTP binary yourself](#6-optional-run-the-http-binary-yourself)
 7. [If something fails](#7-if-something-fails)
 8. [Next reading](#8-next-reading)
-9. [Optional: Paid Call Guard (operators)](#9-optional-paid-call-guard-operators)
+9. [Optional: Metered Call Guard (operators)](#9-optional-metered-call-guard-operators)
 
 ---
 
@@ -72,7 +72,7 @@ You should see:
 - Mainnet contract `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674`. Testnet contract `0x1a1Dc3c55550FCE9F70ef6cDEeF967c0b72a5d84`
 - Sealed = **AES-256-GCM**
 - Settlement names the selected profile
-- Writes need a product API key **and your funded wallet** (not the hosted relayer)
+- Writes need a product API key **and your funded wallet** (not the hosted signer)
 - Fleet belongs to the product API; unreachable capacity fails closed
 
 ### Step 3 — Live chain ping
@@ -85,6 +85,8 @@ Confirm a recent block number and the expected contract. The chain ID is checked
 
 > Call `veya_verify_transaction` with  
 > `0xd68ab19671f0a3be63651cb6d6e24f5decf591da981708502827bca3689d31d8`
+
+This example is a Testnet receipt. It verifies on a server running the Testnet profile. The hosted server runs Mainnet and answers `NOT_VEYA_TX` for it, so there use any `Veya.sol` transaction hash from the Mainnet explorer.
 
 Expect parsed `Veya.sol` events (for example `CommitmentStored`) and a digest. Open the Robinhood Chain explorer for the selected network and match the `to` address to the contract.
 
@@ -140,6 +142,8 @@ const ping = await client.pingChain();
 console.log(ping.chainId.toString()); // matches ROBINHOOD_MAINNET.chainId
 ```
 
+Save it as `ping.mts` and run `npx tsx ping.mts`. Top-level `await` needs an ES module, so a plain `.ts` file in a default `npm init` project fails.
+
 MCP remains the paste-URL agent surface. The SDK is crypto + chain in **your** process.
 
 ---
@@ -193,13 +197,13 @@ More: [VERIFICATION.md](./VERIFICATION.md).
 - [NETWORK_PIN.md](./NETWORK_PIN.md) — chain constants  
 - [AUTHENTICATION.md](./AUTHENTICATION.md) — product key vs your wallet  
 - [SDK_BRIDGE.md](./SDK_BRIDGE.md) — MCP vs SDK  
-- [PAID_CALLS.md](./PAID_CALLS.md) — Paid Call Guard (paid calls from your own wallet)
+- [PAID_CALLS.md](./PAID_CALLS.md) — Metered Call Guard (metered calls from your own wallet)
 
 ---
 
-## 9. Optional: Paid Call Guard (operators)
+## 9. Optional: Metered Call Guard (operators)
 
-On the hosted URL, Paid Call Guard is on and callers pass their VEYA `apiKey`, their own Solana key (`solanaPrivateKey`) and their own Robinhood Chain key (`robinhoodPrivateKey`) (see [PAID_CALLS.md](./PAID_CALLS.md#9-call-it-from-an-agent)). To turn it on for a host you run:
+On the hosted URL, Metered Call Guard is on and callers pass their VEYA `apiKey`, their own Solana key (`solanaPrivateKey`) and their own Robinhood Chain key (`robinhoodPrivateKey`) (see [PAID_CALLS.md](./PAID_CALLS.md#9-call-it-from-an-agent)). To turn it on for a host you run:
 
 1. Build the MCP (`npm ci && npm run build`). The policy config ships in the package (`config/paid-calls.json`).
 2. Start three validator nodes and set `VEYA_PAID_VALIDATOR_NODES` to their URLs.
