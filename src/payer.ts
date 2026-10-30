@@ -14,7 +14,7 @@ export function resolvePayerPrivateKey(
   const key = fromArg || fromEnv;
   if (!key) {
     throw new Error(
-      "payerPrivateKey required. Pass it as a tool argument or set VEYA_PAYER_PRIVATE_KEY. On-chain writes spend YOUR wallet, not the hosted relayer.",
+      "payerPrivateKey required. Pass it as a tool argument or set VEYA_PAYER_PRIVATE_KEY. On-chain writes spend YOUR wallet, not the hosted signer.",
     );
   }
   try {
