@@ -1,5 +1,5 @@
 /**
- * Live product-key + user-paid write proof against api.veyanet.tech + local MCP 1.2.1.
+ * Live product-key + user-funded write proof against api.veyanet.tech + local MCP 1.2.11.
  * Does not print secrets. Uses a throwaway wallet as the user; funds it from the
  * operator relayer only so we can prove explorer `from` is NOT the relayer.
  */
@@ -182,7 +182,7 @@ async function main() {
       params: {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "live-workflow", version: "1.2.1" },
+        clientInfo: { name: "live-workflow", version: "1.2.11" },
       },
     });
     check("MCP initialize", init.status === 200);
