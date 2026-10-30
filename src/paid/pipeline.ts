@@ -10,9 +10,9 @@ import { runQuorum, canonicalJson, blake3Hex, type RunEvidence } from "./validat
 import type { Anchorer } from "./anchor.js";
 import { writeReceipt } from "./receipt.js";
 
-export const ANCHOR_NOT_CONFIGURED_REASON = "ANCHOR_NOT_CONFIGURED: no Robinhood Chain signing key is available for this run, so it could not be recorded. Refused before signing; nothing was checked, signed or paid.";
-export const PAYER_REQUIRED_REASON = "SOLANA_KEY_REQUIRED: pass your own Solana wallet secret key in the solanaPrivateKey argument. Nothing was checked, signed or paid. The key is used in memory for this call only and is never stored.";
-export const ROBINHOOD_KEY_REQUIRED_REASON = "ROBINHOOD_KEY_REQUIRED: pass your own Robinhood Chain key in the robinhoodPrivateKey argument; it signs the VEYA record and pays its gas. Nothing was signed or paid.";
+export const ANCHOR_NOT_CONFIGURED_REASON = "ANCHOR_NOT_CONFIGURED: no Robinhood Chain signing key is available for this run, so it could not be recorded. Refused before signing; nothing was checked, signed or spent.";
+export const PAYER_REQUIRED_REASON = "SOLANA_KEY_REQUIRED: pass your own Solana wallet secret key in the solanaPrivateKey argument. Nothing was checked, signed or spent. The key is used in memory for this call only and is never stored.";
+export const ROBINHOOD_KEY_REQUIRED_REASON = "ROBINHOOD_KEY_REQUIRED: pass your own Robinhood Chain key in the robinhoodPrivateKey argument; it signs the VEYA record and pays its gas. Nothing was signed or spent.";
 
 export type GuardDeps = {
   cfg: PaidConfig; stateDir: string; receiptsDir: string;
@@ -27,7 +27,7 @@ export type GuardDeps = {
    */
   operatorPayer?: () => string | undefined;
   /**
-   * Whether the Robinhood Chain anchor key is available. When this is set and returns false, a new paid call is
+   * Whether the Robinhood Chain anchor key is available. When this is set and returns false, a new metered call is
    * refused with ANCHOR_NOT_CONFIGURED before anything is signed, so nobody pays for a run that cannot be recorded.
    * Resume of already-paid runs is unaffected. When omitted, the anchor is assumed configured (tests).
    */
@@ -93,7 +93,7 @@ export class PaidCallGuard {
   async call(a: PaidCallArgs): Promise<PaidCallResponse> {
     const cfg = this.d.cfg; const tool = a.tool ?? "veya_paid_call";
     const off = this.disabled();
-    if (off) { this.ledger.log("blocked.disabled", { reason: off }); return refused("disabled", "EMERGENCY_DISABLED: paid calls are switched off on this server by the operator. Nothing was checked, signed or paid."); }
+    if (off) { this.ledger.log("blocked.disabled", { reason: off }); return refused("disabled", "EMERGENCY_DISABLED: metered calls are switched off on this server by the operator. Nothing was checked, signed or spent."); }
     const idem = a.owner ? `${a.owner.accountId}:${a.idempotencyKey}` : a.idempotencyKey;
     const taskId = a.owner ? `${a.owner.accountId}:${a.taskId}` : a.taskId;
     const prior = this.ledger.runByIdem(idem);
@@ -143,7 +143,7 @@ export class PaidCallGuard {
     if (!gate.allow) return deny(gate);
     if (a.preflight) {
       let pf: string | null;
-      try { pf = await a.preflight(); } catch (err) { pf = `PREFLIGHT_UNAVAILABLE: ${publicError(err)}. Nothing was signed or paid.`; }
+      try { pf = await a.preflight(); } catch (err) { pf = `PREFLIGHT_UNAVAILABLE: ${publicError(err)}. Nothing was signed or spent.`; }
       if (pf) { const i = pf.indexOf(":"); return deny({ code: i > 0 ? pf.slice(0, i) : "PREFLIGHT_FAILED", reason: i > 0 ? pf.slice(i + 1).trim() : pf, checks: gate.checks }); }
     }
     this.ledger.task(taskId, budget);
@@ -158,7 +158,7 @@ export class PaidCallGuard {
       try { bal = await tokenBalance(cfg.solana.rpcs[0], payerAddress, gate.requirement.asset!, this.f); } catch { bal = undefined; /* RPC down: let the payer library decide */ }
       if (bal !== undefined && bal < gate.callCostAtomic) {
         this.ledger.settle(run.runId, 0n);
-        this.ledger.transition(run.runId, "payment_failed", `before signing: PAYER_INSUFFICIENT_FUNDS: wallet ${payerAddress} holds ${bal} atomic USDC, this call needs ${gate.callCostAtomic}. Nothing was signed or paid.`);
+        this.ledger.transition(run.runId, "payment_failed", `before signing: PAYER_INSUFFICIENT_FUNDS: wallet ${payerAddress} holds ${bal} atomic USDC, this call needs ${gate.callCostAtomic}. Nothing was signed or spent.`);
         return this.finish(run.runId);
       }
     }
@@ -242,7 +242,7 @@ export class PaidCallGuard {
    * Settles the ledger to what actually moved (price only; the xPay SDK skips its fee when the call throws).
    */
   async reconcile(runId: string): Promise<PaidCallResponse> {
-    const r = this.ledger.run(runId); if (!r || r.state !== "resource_error") return r ? this.view(r) : refused("unknown", "UNKNOWN_RUN: no run with this id. Nothing was signed or paid.");
+    const r = this.ledger.run(runId); if (!r || r.state !== "resource_error") return r ? this.view(r) : refused("unknown", "UNKNOWN_RUN: no run with this id. Nothing was signed or spent.");
     const cfg = this.d.cfg; const req = (r.decision as any)?.requirement; if (!req) return this.view(r);
     const payer = this.payerOf(runId);
     const startedSec = Math.floor(new Date(r.history[0].at).getTime() / 1000) - 5;
@@ -322,7 +322,7 @@ export class PaidCallGuard {
     const e = this.ev(runId) as any; const cfg = this.d.cfg;
     try {
       const run0 = this.ledger.run(runId)!;
-      if (e.mode === "partner" && !this.keys.get(runId)) throw new Error("ROBINHOOD_KEY_REQUIRED: pass robinhoodPrivateKey to veya_paid_run with resume=true to record this run. Nothing will be paid again.");
+      if (e.mode === "partner" && !this.keys.get(runId)) throw new Error("ROBINHOOD_KEY_REQUIRED: pass robinhoodPrivateKey to veya_paid_run with resume=true to record this run. Nothing will be spent again.");
       const res = await this.d.anchorer(run0, this.keys.get(runId)).anchor(e.commitment);
       const r = this.ledger.run(runId)!;
       this.ledger.transition(runId, "committed", res.alreadyExisted ? "Already recorded on Robinhood Chain; this commitment was found on chain, so nothing was sent again." : recordedReason(res.blockNumber, res.txHash), {
