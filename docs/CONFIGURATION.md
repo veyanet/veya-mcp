@@ -22,7 +22,7 @@ Source of truth: `src/config.ts` (`loadConfig()`, `writesEnabled()`). Template: 
 8. [CORS](#8-cors)
 9. [Misconfiguration patterns](#9-misconfiguration-patterns)
 10. [Local operator example](#10-local-operator-example)
-11. [Paid Call Guard](#11-paid-call-guard)
+11. [Metered Call Guard](#11-metered-call-guard)
 
 ---
 
@@ -65,14 +65,14 @@ Type `McpServiceConfig`:
 | `contractAddress` | Mainnet protocol contract, or the Testnet contract when Testnet is selected |
 | `apiUrl` | `VEYA_API_URL` (trailing slash stripped) |
 | `mcpApiKey` | `MCP_API_KEY` or `null`. When set, `/mcp` requires this Bearer token |
-| `relayerPrivateKey` | `VEYA_RELAYER_PRIVATE_KEY` or `VEYA_DEPLOYER_PRIVATE_KEY` or `null` (not used for own-wallet writes) |
+| `relayerPrivateKey` | Mainnet: `VEYA_MAINNET_RELAYER_PRIVATE_KEY`. Testnet: `VEYA_RELAYER_PRIVATE_KEY`, else `VEYA_DEPLOYER_PRIVATE_KEY`. Otherwise `null` (not used for own-wallet writes) |
 | `payerPrivateKey` | `VEYA_PAYER_PRIVATE_KEY` or `null` (your wallet for own-wallet writes) |
 | `validatorNodes` | CSV `VEYA_VALIDATOR_NODES` |
 | `sealedNodeUrl` | `VEYA_SEALED_NODE_URL` |
 | `corsOrigins` | CSV `CORS_ORIGIN` |
 | `nodeEnv` | `NODE_ENV` |
 
-`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.10` (read from `package.json`, not from env).
+`MCP_SERVICE_NAME` is `@veyanet/mcp`. `MCP_SERVICE_VERSION` is `1.2.11` (read from `package.json`, not from env).
 
 ---
 
@@ -98,7 +98,7 @@ Must match `@veyanet/sdk` defaults unless you are deliberately running a private
 | `ROBINHOOD_MAINNET_RPC_URL` | URL | `https://rpc.mainnet.chain.robinhood.com` |
 | `ROBINHOOD_MAINNET_EXPLORER_URL` | URL | `https://robinhoodchain.blockscout.com` |
 | `VEYA_MAINNET_CONTRACT_ADDRESS` | address | Mainnet protocol contract. An explicit empty string stays unpublished |
-| `VEYA_MAINNET_RELAYER_PRIVATE_KEY` | `0x` hex | Mainnet relayer key for `veya_seal_decision` when the relayer switch is on |
+| `VEYA_MAINNET_RELAYER_PRIVATE_KEY` | `0x` hex | Mainnet host signer key for `veya_seal_decision` when the host signer switch is on |
 | `VEYA_SEAL_DECISION_ENVIRONMENT_ID` | uuid | Required for `veya_seal_decision` on Mainnet. Testnet uses the SDK environment when this is unset |
 | `VEYA_CONTRACT_ADDRESS` | address | Testnet contract, used only when the profile is Testnet |
 
@@ -127,14 +127,18 @@ See [section 6](#6-fleet-defaults-read-this-twice).
 |----------|------|---------|
 | `VEYA_PAYER_PRIVATE_KEY` | `0x` hex secp256k1 | empty → pass `payerPrivateKey` per tool call |
 
-On-chain writes always use **this** key (or the tool argument). `msg.sender` is your address. The hosted relayer is not the gas payer.
+On-chain writes always use **this** key (or the tool argument). `msg.sender` is your address. The hosted signer is not the gas payer.
 
-### Operator relayer (not the user path)
+### Operator signer (not the user path)
 
 | Variable | Type | Default |
 |----------|------|---------|
 | `MCP_API_KEY` | string | When set, `/mcp` requires `Authorization: Bearer`. Empty leaves the public paste URL open |
-| `VEYA_RELAYER_PRIVATE_KEY` | `0x` hex | empty |
+| `VEYA_RELAYER_PRIVATE_KEY` | `0x` hex | empty. Testnet only. On Mainnet the host signer key is `VEYA_MAINNET_RELAYER_PRIVATE_KEY` |
+| `VEYA_SEAL_DECISION_RELAYER` | `1` or `true` | off. Lets `veya_seal_decision` use the host signer key of the selected network (`VEYA_MAINNET_RELAYER_PRIVATE_KEY` on Mainnet) |
+| `VEYA_SEAL_DECISION_DAILY_CAP` | number | `20` host-signer seal decisions per API key per UTC day |
+| `VEYA_SEAL_DECISION_GLOBAL_DAILY_CAP` | number | `100` host-signer seal decisions per UTC day, all keys |
+| `VEYA_CAPACITY_PER_MINUTE` | number | `30` calls per API key per minute on the fleet and `veya_seal_decision` tools |
 
 ### CORS
 
@@ -153,7 +157,7 @@ writesEnabled() === true
 operatorRelayerWritesEnabled() === false
 ```
 
-Own-wallet write tools are **always registered**. They need a product `apiKey` and `VEYA_PAYER_PRIVATE_KEY` (or the tool argument). The host relayer is not used. See [AUTHENTICATION.md](./AUTHENTICATION.md).
+Own-wallet write tools are **always registered**. They need a product `apiKey` and `VEYA_PAYER_PRIVATE_KEY` (or the tool argument). The host signer is not used. See [AUTHENTICATION.md](./AUTHENTICATION.md).
 
 ---
 
@@ -190,8 +194,8 @@ See [TRANSPORT.md](./TRANSPORT.md). `credentials: true` with an allowlist. MCP n
 |---------|---------|
 | Wrong chain id / RPC | Writes `CHAIN_MISMATCH`; reads look like another network |
 | `PUBLIC_MCP_URL` = private host in prod | Landing tells people the wrong paste URL (landing HTML currently **forces** the canonical public URL; health still uses `cfg.publicMcpUrl`) |
-| Relayer key set, `VEYA_SEAL_DECISION_RELAYER` unset | Seal-decision relayer stays off (own-wallet writes still work) |
-| `MCP_API_KEY` set | `/mcp` requires that Bearer token. Relayer writes stay off unless `VEYA_SEAL_DECISION_RELAYER=1` |
+| Host signer key set, `VEYA_SEAL_DECISION_RELAYER` unset | Seal-decision host signer stays off (own-wallet writes still work) |
+| `MCP_API_KEY` set | `/mcp` requires that Bearer token. Host-signer writes stay off unless `VEYA_SEAL_DECISION_RELAYER=1` |
 | Empty `VEYA_PAYER_PRIVATE_KEY` and no tool arg | `payerPrivateKey required` |
 | Unfunded payer | Mainnet: `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` Testnet: `You don't have testnet tokens. Please get them for the transaction.` |
 | Documenting loopback as the product path | Users cannot reach your private network |
@@ -218,7 +222,7 @@ Related: [DEPLOYMENT.md](./DEPLOYMENT.md) for TLS.
 
 ---
 
-## 11. Paid Call Guard
+## 11. Metered Call Guard
 
 Opt-in. Nothing below is read unless `VEYA_PAID_CALLS=1`. Guide: [PAID_CALLS.md](./PAID_CALLS.md).
 
@@ -235,8 +239,11 @@ Opt-in. Nothing below is read unless `VEYA_PAID_CALLS=1`. Guide: [PAID_CALLS.md]
 | `VEYA_PAID_RECEIPTS_BASE_URL` | URL | unset = replies show the relative route `/receipts/paid/<runId>` |
 | `VEYA_PAID_VALIDATOR_NODES` | CSV of URLs | from the config file (required with the shipped config) |
 | `VEYA_PAID_CALLS_DISABLED` | `1` = kill switch | off |
+| `VEYA_PAID_SPONSORED_KEYS` | `<apiKeyId>:<limitUsdc>[:<YYYY-MM-DD>]`, comma-separated | empty. Key ids only, never full keys. When set, the listed key ids may run calls on the server's own wallets up to their USDC limit, and the wallet-key arguments become optional in the tool schema |
+| `VEYA_PAID_SOLANA_KEY_PATH` | path to a Solana keypair file | unset. Server Solana payer, used only for the key ids in `VEYA_PAID_SPONSORED_KEYS` |
+| `VEYA_PAID_ANCHOR_KEY_PATH` | path to a Robinhood Chain key file | unset. Server anchor key for those runs. Kept apart from the host signer key so no other tool gains write power |
 
-Callers bring their own keys as tool arguments (`solanaPrivateKey`, `robinhoodPrivateKey`), used in memory for that call only. The server needs no wallet for paid calls.
+Callers bring their own keys as tool arguments (`solanaPrivateKey`, `robinhoodPrivateKey`), used in memory for that call only. With `VEYA_PAID_SPONSORED_KEYS` empty the server needs no wallet for metered calls.
 
 One MCP process per state folder (`ledger.lock`). A second process on the same folder gets `STATE_LOCKED`.
 
@@ -244,7 +251,7 @@ One MCP process per state folder (`ledger.lock`). A second process on the same f
 
 | Field | Meaning |
 |-------|---------|
-| `enabled` | `false` blocks every paid call. |
+| `enabled` | `false` blocks every metered call. |
 | `recordVersion` | Version tag inside each anchored commitment record. |
 | `providers[]` | `id`, `label`, default `payer` (`xpay-sdk` or `x402-exact`). `xpay-sdk` providers also carry `sdk.platformFee` and `sdk.guardrail`. |
 | `resources[]` | `id`, `provider`, optional `payer` override, `url`, `method`, `input` (`required`, `optional`, `properties` with kinds `solana-address`, `slug`, `string`), `expectedResult`, and the pinned `x402` requirement (`scheme`, `network`, `asset`, `payTo`, `amount`, `feePayer`, `maxTimeoutSeconds`). |
