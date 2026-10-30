@@ -110,7 +110,7 @@ Update [docs/TOOLS.md](./docs/TOOLS.md) in the **same PR** as a new or renamed t
 8. If the tool changes architecture, update [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) and [docs/SDK_BRIDGE.md](./docs/SDK_BRIDGE.md).
 9. Extend smoke if the tool is always registered (`tools/list` already asserts ≥ 30 names plus ping/describe/verify/hash).
 
-Own-wallet write tools are always registered. Do not send those txs from a hosted relayer.
+Own-wallet write tools are always registered. Do not send those txs from a hosted signer.
 
 ---
 
