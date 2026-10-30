@@ -83,7 +83,7 @@ test("partner mode: out-of-policy run is denied, saved to the account, never ech
 });
 
 test("partner mode: preflight failure (no ETH / no environment) is refused after the policy gate and before signing", async () => {
-  const s = await setup({ preflight: "ROBINHOOD_INSUFFICIENT_GAS: your wallet holds 0 wei. Nothing was signed or paid." });
+  const s = await setup({ preflight: "ROBINHOOD_INSUFFICIENT_GAS: your wallet holds 0 wei. Nothing was signed or spent." });
   // The quote probe is offline here, so give the gate a reachable quote by stubbing the probe through policy is not possible; check order instead.
   const r = await s.call("veya_paid_call", { ...base, idempotencyKey: "idem-pf-1", apiKey: KEY_A, solanaPrivateKey: await freshSol(), robinhoodPrivateKey: Wallet.createRandom().privateKey });
   assert.equal(r.decision, "blocked"); assert.equal(s.calls.pay, 0);
