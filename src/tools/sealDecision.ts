@@ -29,7 +29,7 @@ export function resolveMcpSealEnvironment(
 export function registerSealDecisionTools(server: McpServer, cfg: McpServiceConfig): void {
   server.tool(
     "veya_seal_decision",
-    "Seal an evidence id and a decision. attestExecution is sent only when a payer key is passed, or when this host's seal-decision relayer switch is on. On Mainnet pass environmentId or set VEYA_SEAL_DECISION_ENVIRONMENT_ID. Without either, the result is SEAL_ENVIRONMENT_REQUIRED and nothing is sent.",
+    "Seal an evidence id and a decision. attestExecution is sent only when a payer key is passed, or when this host's seal-decision host-signer switch is on. On Mainnet pass environmentId or set VEYA_SEAL_DECISION_ENVIRONMENT_ID. Without either, the result is SEAL_ENVIRONMENT_REQUIRED and nothing is sent.",
     {
       evidenceId: z.string().min(1),
       decision: z.string().min(2),
