@@ -191,7 +191,7 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
 }
 
 export function startHttpServer(cfg: McpServiceConfig = loadConfig()) {
-  // Fail fast: a paid-call misconfiguration (missing validators, locked state folder) must stop the
+  // Fail fast: a metered-call misconfiguration (missing validators, locked state folder) must stop the
   // process at boot, not answer every MCP session with a generic 500 while /health looks fine.
   if (process.env.VEYA_PAID_CALLS === "1") {
     try { sharedGuard(); } catch (e) {
