@@ -6,7 +6,7 @@
   **The official Model Context Protocol server for post-quantum agent tools, chain verification, sealed-execution service info, and protocol settlement on Robinhood Chain.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.10-cb3837.svg?style=flat-edge)](./package.json)
+  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.11-cb3837.svg?style=flat-edge)](./package.json)
   [![Node Version](https://img.shields.io/badge/Node-%3E%3D20-green.svg?style=flat-edge)](https://nodejs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-edge)](https://www.typescriptlang.org/)
   [![MCP Endpoint](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9.svg?style=flat-edge)](https://mcp.veyanet.tech/mcp)
@@ -19,7 +19,7 @@
 
 ## 💡 Information: What is VEYA?
 
-The **VEYA Protocol** is a decentralized, cryptographically shielded execution layer engineered for post-quantum resilient autonomous agent fleets on **Robinhood Chain**. Traditional LLM agent frameworks suffer from severe structural vulnerabilities: because agents require private execution contexts—such as API integration credentials, proprietary system prompts, treasury authority, and policy rules—running them in standard host runtimes exposes sensitive state in plaintext to host operators, database administrators, and network intermediaries.
+The **VEYA Protocol** is a cryptographically shielded execution layer engineered for post-quantum resilient autonomous agent fleets on **Robinhood Chain**. Traditional LLM agent frameworks suffer from severe structural vulnerabilities: because agents require private execution contexts—such as API integration credentials, proprietary system prompts, treasury authority, and policy rules—running them in standard host runtimes exposes sensitive state in plaintext to host operators, database administrators, and network intermediaries.
 
 VEYA solves this security gap by establishing client-side cryptographic boundaries and post-quantum attestation primitives. Sensitive agent workloads are protected through local post-quantum key generation (**ML-DSA-44**), quantum-resistant session negotiation (**Kyber-768**), high-throughput cryptographic digests (**BLAKE3-256**), sealed execution with **AES-256-GCM**, and **2-of-3 multi-node consensus**. This tree defaults to **Mainnet**. `Veya.sol` there is the protocol contract `0x87dC582eEA544A434a5C1e30Ca3d12c1e548a674`. `ROBINHOOD_NETWORK=testnet` keeps **Testnet**.
 
@@ -30,7 +30,7 @@ The `@veyanet/mcp` package is the canonical **Model Context Protocol** surface f
 By connecting an MCP client to `@veyanet/mcp`, you enable the following core capabilities:
 *   **Paste-URL Access**: Connect via `https://mcp.veyanet.tech/mcp` (Streamable HTTP).
 *   **Public Tools**: Describe the stack, ping Robinhood Chain, BLAKE3, verify `Veya.sol` txs, PQ crypto, registry, product sessions via `https://api.veyanet.tech`.
-*   **Own-wallet writes**: On-chain tools need a product API key (`veya_dev_` / `veya_live_`) and **your** funded wallet. The hosted relayer is not the gas payer.
+*   **Own-wallet writes**: On-chain tools need a product API key (`veya_dev_` / `veya_live_`) and **your** funded wallet. The hosted signer is not the gas payer.
 *   **SDK-Backed Settlement**: Chain calls use `@veyanet/sdk`. The default profile is Mainnet. Testnet is `ROBINHOOD_NETWORK=testnet`.
 *   **Backend-owned fleet**: Consensus validators and sealed capacity belong to the product API (`https://api.veyanet.tech`).
 
@@ -203,7 +203,7 @@ app.listen(cfg.port, cfg.host);
 | `VEYA_API_URL` | Product API (health, registry, sessions, fleet capacity) | `https://api.veyanet.tech` |
 | `CORS_ORIGIN` | Comma-separated Origin allowlist | empty = reject credentialed browser Origin |
 | `NODE_ENV` | Runtime mode | `development` |
-| `VEYA_PAID_CALLS` | `1` enables Paid Call Guard (3 more tools; callers pay from their own wallet). Its other `VEYA_PAID_*` settings are in [docs/CONFIGURATION.md](./docs/CONFIGURATION.md#11-paid-call-guard) | off |
+| `VEYA_PAID_CALLS` | `1` enables Metered Call Guard (3 more tools; callers pay from their own wallet). Its other `VEYA_PAID_*` settings are in [docs/CONFIGURATION.md](./docs/CONFIGURATION.md#11-metered-call-guard) | off |
 
 Host-only settings (fleet URLs and host signing keys) are covered in the operator guide, [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md). Public users never set them.
 
@@ -243,7 +243,7 @@ https://mcp.veyanet.tech/mcp
 
 ## 🧩 Core Tools Overview
 
-`@veyanet/mcp` **1.2.10** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
+`@veyanet/mcp` **1.2.11** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
 
 ### 0. Proof
 
@@ -263,7 +263,7 @@ A read sends nothing:
 
 Text `hello` returns `mode` `digest`, `anchored` false, and digest `ea8f163db38682925e4491c5e58d4bb3506ef8c14eb78a86e908c5624a67200f`.
 
-An anchor sends one `storeCommitment` from the wallet in `payerPrivateKey`. It does not use a product `apiKey`, and it does not use the host relayer. The environment id must already exist on `Veya.sol`. This one does: `7d0af0ba-2ae3-4d0e-bc75-0bbaccb3dd71`. A 32-hex bytes16 also parses. A hyphenated id must be a real UUID, so `00000000-0000-0000-0000-000000000001` is refused.
+An anchor sends one `storeCommitment` from the wallet in `payerPrivateKey`. It does not use a product `apiKey`, and it does not use the host signer. The environment id must already exist on `Veya.sol`. This one does: `7d0af0ba-2ae3-4d0e-bc75-0bbaccb3dd71`. A 32-hex bytes16 also parses. A hyphenated id must be a real UUID, so `00000000-0000-0000-0000-000000000001` is refused.
 
 ```json
 {
@@ -334,7 +334,7 @@ Args: (none)
 
 ### 5. Authenticated On-Chain Writes
 
-Always available. `msg.sender` is **your** wallet, not the hosted relayer.
+Always available. `msg.sender` is **your** wallet, not the hosted signer.
 
 | Tool | Primary args | On-chain method |
 |------|----------------|-----------------|
@@ -346,7 +346,7 @@ Writes go through SDK `EvmAnchor`, which calls `ensureRobinhoodChain()` before s
 
 ---
 
-### 6. Paid Call Guard
+### 6. Metered Call Guard
 
 ```text
 Tools: veya_paid_discover, veya_paid_call, veya_paid_run
@@ -357,7 +357,7 @@ Receipts: public proof links (no keys, apiKey or input)
 Kill switch: operator-only; callers cannot change it
 ```
 
-An agent calls a paid x402 resource through one guarded tool. VEYA checks the call against a fixed policy before anything is signed, checks your API key and both wallet balances, pays exactly the approved quote from **your** Solana wallet, verifies the payment on Solana at `finalized`, gets 2-of-3 validator signatures, anchors a commitment on `Veya.sol` from **your** Robinhood Chain address and saves the run to your VEYA account. A blocked call is never signed and moves no money. The same `idempotencyKey` never pays twice. Every run gets a receipt at `/receipts/paid/<runId>`. Receipt links are public: anyone with the link can read the proof, and a receipt never holds keys, your `apiKey` or your input. Every refusal returns `decision: "blocked"`, a stable `code` and `payment: null`. `veya_paid_discover` shows the per-call cap, the task budget maximum (0.04 USDC) and default, and for each resource the provider quote and the total charged to your task budget. See [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
+An agent calls a metered x402 resource through one guarded tool. VEYA checks the call against a fixed policy before anything is signed, checks your API key and both wallet balances, pays exactly the approved quote from **your** Solana wallet, verifies the payment on Solana at `finalized`, gets 2-of-3 validator signatures, anchors a commitment on `Veya.sol` from **your** Robinhood Chain address and saves the run to your VEYA account. A blocked call is never signed and moves no money. The same `idempotencyKey` never pays twice. Every run gets a receipt at `/receipts/paid/<runId>`. Receipt links are public: anyone with the link can read the proof, and a receipt never holds keys, your `apiKey` or your input. Every refusal returns `decision: "blocked"`, a stable `code` and `payment: null`. `veya_paid_discover` shows the per-call cap, the task budget maximum (0.04 USDC) and default, and for each resource the provider quote and the total charged to your task budget. See [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
 
 Try it from any MCP client connected to `https://mcp.veyanet.tech/mcp`:
 
@@ -522,7 +522,7 @@ This README serves as the entry point. For detailed operational and integrator m
 | **[HTTP Transport](./docs/TRANSPORT.md)** | Protocol | Streamable HTTP, sessions, CORS, Accept headers. |
 | **[Authentication & Writes](./docs/AUTHENTICATION.md)** | Security | Product API key vs your wallet; funding. |
 | **[SDK Relationship](./docs/SDK_BRIDGE.md)** | Integration | What MCP calls in `@veyanet/sdk` and the product API. |
-| **[Paid Call Guard](./docs/PAID_CALLS.md)** | Opt-in feature | Paid x402 calls under a VEYA policy, verified on Solana and recorded on Robinhood Chain. |
+| **[Metered Call Guard](./docs/PAID_CALLS.md)** | Opt-in feature | Metered x402 calls under a VEYA policy, verified on Solana and recorded on Robinhood Chain. |
 | **[Changelog](./CHANGELOG.md)** | History | Package version history. |
 | **[Security Policy](./SECURITY.md)** | Security | Disclosure and secrets hygiene. |
 
@@ -549,7 +549,7 @@ The SDK is a TypeScript library you import. MCP is a network service that expose
 Paste `https://mcp.veyanet.tech/mcp`. Consensus and sealed capacity belong to the product API (`https://api.veyanet.tech`). Use `@veyanet/sdk` from npm for TypeScript.
 
 ### 7. What happens if Robinhood RPC is down?
-`veya_ping_chain` and verify tools fail with transport / RPC errors. Check `https://mcp.veyanet.tech/health` and the Robinhood RPC independently.
+`veya_ping_chain` and verify tools fail with transport / RPC errors. Check `https://mcp.veyanet.tech/health` and the Robinhood RPC separately.
 
 ### 8. Can I point this server at another chain id?
 Select Mainnet or Testnet with `ROBINHOOD_NETWORK`. Do not point the RPC at a different chain from the profile. SDK writes reject that mismatch. Mainnet is the default profile in this tree.
@@ -560,7 +560,7 @@ Select Mainnet or Testnet with `ROBINHOOD_NETWORK`. Do not point the RPC at a di
 
 ### Contribution Standards
 We welcome contributions to `@veyanet/mcp`. Pull requests must preserve security integrity:
-*   **Own-wallet writes**: Do not send chain txs from a hosted relayer when the caller has a product API key; `msg.sender` must be the user's wallet.
+*   **Own-wallet writes**: Do not send chain txs from a hosted signer when the caller has a product API key; `msg.sender` must be the user's wallet.
 *   **Secret Hygiene**: Reject changes that log `apiKey`, `payerPrivateKey`, or dump `.env` into docs.
 *   **SDK Boundary**: Prefer calling `@veyanet/sdk` over re-implementing hashing, verify, or `EvmAnchor` inside tool handlers.
 
