@@ -73,10 +73,10 @@ ${setupSnippets()}
   return renderPage({ title: "VEYA MCP · Setup", description: "Connect any AI agent to VEYA on Robinhood Chain with one MCP URL.", active: "mcp", logoSrc: LOGO, logoLightSrc: LOGO_LIGHT, hero, body });
 }
 
-/** True when this server registers the Paid Call Guard tools. */
+/** True when this server registers the Metered Call Guard tools. */
 export const paidCallsOn = () => process.env.VEYA_PAID_CALLS === "1";
 
-/** Paid Call Guard section: what it does, the 3 tools, own-wallet call, blocked-before-payment, receipts. */
+/** Metered Call Guard section: what it does, the 3 tools, own-wallet call, blocked-before-payment, receipts. */
 export function paidSection(): string {
   if (!paidCallsOn()) return "";
   const callArgs = { taskId: "task-1", idempotencyKey: "a-new-uuid-per-call", resourceId: "tokens.asset-risk-summary", input: { assetId: "solana" }, apiKey: "YOUR_VEYA_API_KEY", solanaPrivateKey: "YOUR_SOLANA_SECRET_KEY", robinhoodPrivateKey: "YOUR_ROBINHOOD_CHAIN_KEY" };
@@ -84,16 +84,16 @@ export function paidSection(): string {
   const hl = raw.replace(/("[^"]+")(:)|("[^"]*")/g, (_m, k, c, v) => (k ? `<span class="k">${k}</span><span class="p">${c}</span>` : `<span class="s">${v}</span>`));
   const steps: Array<[string, string, string]> = [
     ["permission-agents", "Checked before payment", "Host, resource, network, token, payee, per-call cap, task budget and input are checked first. A blocked call is never signed and moves no money."],
-    ["settlement-layer", "Paid from your wallet", "An allowed call pays the exact approved quote in USDC on Solana from your own wallet. VEYA confirms it at finalized."],
+    ["settlement-layer", "Settled from your wallet", "An allowed call pays the exact approved quote in USDC on Solana from your own wallet. VEYA confirms it at finalized."],
     ["encrypted-coordination", "Verified and recorded", "Three validators re-check the payment and at least 2 of 3 must agree. Your Robinhood Chain key then records a commitment on Veya.sol and pays its gas."],
     ["verified-execution", "Receipt for every run", "Each run is saved to your VEYA account and gets a receipt page and JSON with the decision, payment link, validator result and Robinhood Chain record."],
   ];
   const tools = `<table class="ptable"><tr><th>Tool</th><th>Pays</th><th>Use</th></tr>
 <tr><td><code>veya_paid_discover</code></td><td>Never</td><td>Lists allowed resources, input fields, a live quote and a policy preview.</td></tr>
-<tr><td><code>veya_paid_call</code></td><td>Once per idempotency key</td><td>Runs one guarded paid call with your <code>apiKey</code>, <code>solanaPrivateKey</code> and <code>robinhoodPrivateKey</code>. A repeat with the same key returns the same run and never pays again.</td></tr>
+<tr><td><code>veya_paid_call</code></td><td>Once per idempotency key</td><td>Runs one guarded metered call with your <code>apiKey</code>, <code>solanaPrivateKey</code> and <code>robinhoodPrivateKey</code>. A repeat with the same key returns the same run and never pays again.</td></tr>
 <tr><td><code>veya_paid_run</code></td><td>Never</td><td>Lists the runs saved to your VEYA account, reads one, or resumes its verification and recording. Private to your API key's account.</td></tr></table>`;
   return `<section class="band" id="paid-calls"><div class="wrap">
-<div class="sh"><span class="label">Paid Call Guard</span><h2>Paid calls, <span class="grad">checked first.</span></h2><p>Your agent can call a paid x402 resource through VEYA. VEYA checks the call against a fixed policy before anything is signed, then verifies the payment and records proof.</p></div>
+<div class="sh"><span class="label">Metered Call Guard</span><h2>Metered calls, <span class="grad">checked first.</span></h2><p>Your agent can call a metered x402 resource through VEYA. VEYA checks the call against a fixed policy before anything is signed, then verifies the payment and records proof.</p></div>
 <div class="grid two">${steps.map(([m, t, d]) => `<div class="card">${icon(m)}<h3>${t}</h3><p>${d}</p></div>`).join("")}</div>
 <div class="keyflow" style="margin-top:24px"><div class="card accent">${icon("developers")}<h3>Three tools</h3>${tools}</div>
 <div class="stack">${codeBlock("Tool call with your API key and wallet keys", hl, raw)}
@@ -129,7 +129,7 @@ export function FAQ(toolCount: number): Array<[string, string]> {
     ["Which network does it use?", `Robinhood Chain mainnet. Receipts are written to the VEYA contract and link to the Robinhood Chain explorer.`],
     [`What can the ${toolCount} tools do?`, `Hash and prove content with BLAKE3, anchor and verify receipts, create ML-DSA post-quantum keys and signatures, manage environments and agents, allow or deny tools per agent, store scoped memory, run 2-of-3 validator consensus and AES-256-GCM sealed jobs, and read the public registry.`],
     ["Are my keys stored?", `No. <code>apiKey</code>, <code>payerPrivateKey</code>, <code>solanaPrivateKey</code> and <code>robinhoodPrivateKey</code> are tool arguments passed per call. They are not part of <code>mcp.json</code>, and VEYA's agent rules say never to echo them back. Onchain writes only send after your wallet matches the key's wallet and you confirm.`],
-    ...(paidCallsOn() ? [["How do paid calls work?", `Call <code>veya_paid_discover</code> to see what is allowed, then <code>veya_paid_call</code> with your VEYA <code>apiKey</code>, your Solana key in <code>solanaPrivateKey</code> and your Robinhood Chain key in <code>robinhoodPrivateKey</code>. VEYA checks the call and your balances before anything is signed, pays from your Solana wallet only if it is allowed, confirms the payment, gets 2 of 3 validators to agree, records the result on Robinhood Chain from your address and saves the run to your VEYA account (<code>veya_paid_run</code> lists them). A blocked call never pays and returns a <code>code</code> with <code>payment: null</code>, and the same idempotency key never pays twice. Receipt links are public proof with no keys or input. The kill switch is operator-only.`] as [string, string]] : []),
+    ...(paidCallsOn() ? [["How do metered calls work?", `Call <code>veya_paid_discover</code> to see what is allowed, then <code>veya_paid_call</code> with your VEYA <code>apiKey</code>, your Solana key in <code>solanaPrivateKey</code> and your Robinhood Chain key in <code>robinhoodPrivateKey</code>. VEYA checks the call and your balances before anything is signed, pays from your Solana wallet only if it is allowed, confirms the payment, gets 2 of 3 validators to agree, records the result on Robinhood Chain from your address and saves the run to your VEYA account (<code>veya_paid_run</code> lists them). A blocked call never pays and returns a <code>code</code> with <code>payment: null</code>, and the same idempotency key never pays twice. Receipt links are public proof with no keys or input. The kill switch is operator-only.`] as [string, string]] : []),
     ["How do I verify a receipt?", `Ask your agent to run <code>veya_verify_transaction</code> with the transaction hash, open <a href="${APP_URL}/verify">app.veyanet.tech/verify</a>, or call <code>GET ${API_URL}/api/verify/&lt;tx&gt;</code>. A transaction that is not a VEYA receipt returns <code>NOT_VEYA_TX</code>.`],
   ];
 }
