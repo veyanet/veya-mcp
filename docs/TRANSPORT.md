@@ -68,7 +68,7 @@ Related URLs:
 | `GET` | `/health` | None | service info (version, network, writes flag, sealed claim). |
 | `POST` | `/mcp` | None (keys are tool args) | **Primary** Streamable HTTP. Stateless. |
 | `POST` | `/mcp/session` | None | Optional session-id transport map. |
-| `GET` | `/receipts/paid/:runId` | None | Only when `VEYA_PAID_CALLS=1`. Paid Call Guard receipt (HTML). `…/:runId.json` returns the public fields. See [PAID_CALLS.md](./PAID_CALLS.md#7-receipts). |
+| `GET` | `/receipts/paid/:runId` | None | Only when `VEYA_PAID_CALLS=1`. Metered Call Guard receipt (HTML). `…/:runId.json` returns the public fields. See [PAID_CALLS.md](./PAID_CALLS.md#7-receipts). |
 
 Public paste URL is `https://mcp.veyanet.tech/mcp`.
 
@@ -127,12 +127,12 @@ Shape (fields from code):
 |-------|---------|
 | `status` | `"ok"` if the MCP process is up (not a fleet check) |
 | `service` | `@veyanet/mcp` |
-| `version` | `1.2.10` (from `MCP_SERVICE_VERSION`) |
+| `version` | `1.2.11` (from `MCP_SERVICE_VERSION`) |
 | `publicMcpUrl` | From `PUBLIC_MCP_URL` env |
 | `network` | `mainnet` or `testnet` |
 | `contractAddress` | `Veya.sol` |
 | `writesEnabled` | `true` (own-wallet write tools registered) |
-| `operatorRelayerWrites` | `false` (own-wallet writes never use the host relayer) |
+| `operatorRelayerWrites` | `false` (own-wallet writes never use the host signer) |
 | `sealed` | `"AES-256-GCM"` |
 | `paidCallGuard` | `{ enabled: false }` when off. When on: `enabled`, `killSwitch`, `tools`, `requires` (`apiKey`, `solanaPrivateKey`, `robinhoodPrivateKey`), `payer` (your own wallets), `runsSavedTo` (your VEYA account), `resources`, `paymentNetwork`, `recordNetwork`, `validators`, `receipts`. Never keys or paths |
 | `settlement` | `"Robinhood Chain Mainnet"` (or `"Robinhood Chain Testnet"` on Testnet) |
