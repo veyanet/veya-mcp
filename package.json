@@ -1,6 +1,6 @@
 {
   "name": "@veyanet/mcp",
-  "version": "1.2.10",
+  "version": "1.2.11",
   "description": "VEYA MCP - Streamable HTTP Model Context Protocol for Robinhood Chain. Default profile is Mainnet.",
   "license": "MIT",
   "type": "module",
@@ -36,6 +36,7 @@
   ],
   "scripts": {
     "build": "tsup",
+    "prepack": "npm run build",
     "dev": "tsx watch src/cli.ts",
     "start": "node dist/cli.js",
     "lint": "tsc --noEmit",
@@ -50,7 +51,7 @@
     "@noble/hashes": "2.4.0",
     "@noble/post-quantum": "0.7.1",
     "@solana/kit": "5.5.1",
-    "@veyanet/sdk": "1.2.9",
+    "@veyanet/sdk": "1.2.11",
     "@x402/core": "2.28.0",
     "@x402/svm": "2.28.0",
     "@xona-labs/xpay": "0.2.38",
