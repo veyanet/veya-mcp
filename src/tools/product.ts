@@ -60,6 +60,23 @@ export function registerProductTools(server: McpServer, cfg: McpServiceConfig): 
   );
 
   server.tool(
+    "veya_tier",
+    "Your $VEYA account tier and the limits it sets on the product API: daily actions, daily receipts, receipt history window and API key rate per minute, plus today's use. The tier comes from the $VEYA held by your sign-in wallet plus up to 3 linked wallets on Robinhood Chain mainnet. Without a key, returns the public tier table.",
+    { apiKey, sessionToken },
+    async ({ apiKey: key, sessionToken: jwt }) => {
+      try {
+        const credential = resolveCredential(key, jwt);
+        if (!credential) return toolApiResult(await apiRequest(cfg, "/public/holder-tiers"));
+        return toolApiResult(
+          await apiRequest(cfg, "/v1/holder/tier", { apiKey: credential, sessionToken: credential }),
+        );
+      } catch (err) {
+        return toolError(err);
+      }
+    },
+  );
+
+  server.tool(
     "veya_list_environments",
     "List environments for a product API key (guest JWT sees showcase / Use scope only)",
     { apiKey, sessionToken },
