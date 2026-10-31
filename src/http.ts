@@ -17,9 +17,19 @@ import { registeredToolCount, renderMcpInfoHtml, renderMcpRootHtml, wantsHtml } 
 import { mountPaidReceipts } from "./paid/receiptRoutes.js";
 import { paidCallsStatus, sharedGuard } from "./paid/tools.js";
 import { LOGO_PNG, LOGO_MARK_LIGHT_PNG } from "./brandAssets.js";
+import { sharedToolStats, toolCallNames, type ToolStats } from "./toolStats.js";
 
-export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
+export function createHttpApp(
+  cfg: McpServiceConfig = loadConfig(),
+  opts: { toolStats?: ToolStats } = {},
+): Express {
   const app = express();
+  const toolStats = opts.toolStats ?? sharedToolStats();
+  let knownTools: Set<string> | null = null;
+  const registeredToolNames = () =>
+    (knownTools ??= new Set(
+      Object.keys((createMcpServer(cfg) as unknown as { _registeredTools?: Record<string, unknown> })._registeredTools ?? {}),
+    ));
   app.set("trust proxy", 1);
   app.use(express.json({ limit: "1mb" }));
 
@@ -54,6 +64,10 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
   };
   app.get("/health", healthHandler);
   app.get("/healthz", healthHandler);
+  // Public usage numbers: tool-call counts only. See toolStats.ts.
+  app.get("/stats", (_req, res) => {
+    res.set("Cache-Control", "public, max-age=30").json(toolStats.summary());
+  });
   app.get("/assets/veya-logo.png", (_req, res) => {
     res.set("Cache-Control", "public, max-age=86400").type("png").send(LOGO_PNG);
   });
@@ -109,7 +123,24 @@ export function createHttpApp(cfg: McpServiceConfig = loadConfig()): Express {
     }
     next();
   };
-  app.use("/mcp", mcpLimiter, requireOperatorKey);
+  // Counts a tools/call once the transport has accepted it (HTTP status below 400).
+  const countToolCalls = (req: Request, res: Response, next: NextFunction) => {
+    if (req.method === "POST") {
+      try {
+        const names = toolCallNames(req.body, registeredToolNames());
+        if (names.length > 0) {
+          res.once("finish", () => {
+            if (res.statusCode >= 400) return;
+            for (const name of names) toolStats.record(name);
+          });
+        }
+      } catch {
+        // Counting never changes the MCP reply.
+      }
+    }
+    next();
+  };
+  app.use("/mcp", mcpLimiter, requireOperatorKey, countToolCalls);
 
   app.post("/mcp", handleMcp);
   app.get("/mcp", handleMcp);
@@ -200,6 +231,10 @@ export function startHttpServer(cfg: McpServiceConfig = loadConfig()) {
     }
   }
   const app = createHttpApp(cfg);
+  const saveStats = () => sharedToolStats().save();
+  process.once("SIGINT", () => { saveStats(); process.exit(0); });
+  process.once("SIGTERM", () => { saveStats(); process.exit(0); });
+  process.once("beforeExit", saveStats);
   return app.listen(cfg.port, cfg.host, () => {
     console.log(`[veyanet/mcp] listening on http://${cfg.host}:${cfg.port}`);
     console.log(`[veyanet/mcp] MCP POST ${cfg.publicMcpUrl} (local /mcp)`);
