@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.veyanet/veya",
+  "title": "VEYA",
+  "description": "Check, limit, record and prove AI agent actions with 2-of-3 validators and onchain proofs.",
+  "version": "1.2.13",
+  "websiteUrl": "https://veyanet.tech/docs",
+  "repository": {
+    "url": "https://github.com/veyanet/veya-mcp",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.veyanet.tech/mcp"
+    }
+  ]
+}
