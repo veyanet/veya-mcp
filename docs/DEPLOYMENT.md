@@ -4,7 +4,7 @@ How to run the MCP Node process behind TLS so agents can paste a public HTTPS UR
 
 **Public paste URL:** `https://mcp.veyanet.tech/mcp`  
 **Product API:** `https://api.veyanet.tech`  
-**npm:** `@veyanet/mcp@1.2.11`
+**npm:** `@veyanet/mcp@1.2.13`
 
 Public users only need that paste URL (and optionally `@veyanet/sdk`). This guide is for the person who operates the host.
 
@@ -205,6 +205,8 @@ Landing must tell humans to paste `https://mcp.veyanet.tech/mcp`.
 API health may be `degraded` if validators/sealed are down on the API host. MCP can still be `ok`.
 
 Then connect a real MCP client and call `veya_describe` + `veya_ping_chain`. See [VERIFICATION.md](./VERIFICATION.md).
+
+Usage counts: `GET /stats` returns tool-call counts only (`toolCalls.total`, `last24h`, `last7d`, `last30d`, a 30-day `daily` series and `topTools7d`). A call is counted when a `tools/call` for a registered tool reaches `/mcp` or `/mcp/session` after the rate limit and bearer check and the transport accepts it (HTTP status below 400). A tool that runs and returns an error result is still a call. Only the tool name is kept; Metered Call Guard tools are grouped as `metered_calls`. The file `tool-stats.json` lives in `VEYA_STATS_DIR`, else `<VEYA_PAID_ROOT>/state`, else `~/.veya/mcp`, so a new zip keeps the counts. The API reads this endpoint when its `MCP_STATS_URL` is set and shows it as `mcp` in `GET /public/stats`.
 
 ---
 
