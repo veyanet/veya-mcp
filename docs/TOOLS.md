@@ -56,7 +56,7 @@ If validators or sealed-node are down, consensus/sealed tools return a clear err
 
 `veya_writes_status` is always registered. It explains own-wallet writes. On Mainnet an empty wallet says `Your wallet has no ETH on Robinhood Chain. Add funds and try again.` On Testnet it says `You don't have testnet tokens. Please get them for the transaction.`
 
-**51 tools** (writes always listed). **54 tools** when Metered Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-metered-call-guard).
+**52 tools** (writes always listed). **55 tools** when Metered Call Guard is on (`VEYA_PAID_CALLS=1`); see [section 7](#7-metered-call-guard).
 
 ---
 
@@ -501,6 +501,7 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 |------|------|
 | `veya_guest_login` | `POST /auth/guest` (no token; listing only) |
 | `veya_account` | `GET /v1/account` |
+| `veya_tier` | `GET /v1/holder/tier` (key) or `GET /public/holder-tiers` (no key) |
 | `veya_list_environments` | `GET /v1/environments` |
 | `veya_get_environment` | `GET /v1/environments/:id` |
 | `veya_create_environment` | `POST /v1/environments` (no gas) |
@@ -543,6 +544,25 @@ These tools call `https://api.veyanet.tech` (or `VEYA_API_URL`). Return wrapper:
 **What it does.** `GET /v1/account` — wallet bound to this API key.
 
 **Arguments.** `apiKey`.
+
+---
+
+## `veya_tier`
+
+**What it does.** Your $VEYA account tier and the limits it sets on the product API. With `apiKey` (or a session token): `GET /v1/holder/tier`, which returns `tier` (`id`, `name`, `rank`), `balance` (summed whole $VEYA), `source` (`chain`, `last-known`, `unavailable`, `no-wallet`, `guest`, `disabled`), counted `wallets` (shortened), `limits` (`apiRatePerMinute`, `apiRatePerMinuteByKey`, `dailyActions`, `dailyReceipts`, `receiptHistoryDays`, null = full), `today` (actions and receipts used, `resetsAt`) and `nextTier`. Without a key: `GET /public/holder-tiers`, the tier table.
+
+**How the tier is set.** The API sums the $VEYA held by the sign-in wallet plus up to 3 linked wallets on Robinhood Chain mainnet, cached about 5 minutes. If the chain cannot be read it uses the last balance it read (up to 24 hours), else Base. Server defaults:
+
+| Tier | Whole $VEYA held (summed) | Daily actions | Daily receipts | Receipt history | API key rate per minute |
+|------|---------------------------|---------------|----------------|-----------------|-------------------------|
+| Base | under 1,000,000 | 2,000 | 100 | 90 days | 1x (dev 120, live 600) |
+| Holder | 1,000,000 | 5,000 | 250 | 365 days | 1.5x (180 / 900) |
+| Builder | 5,000,000 | 10,000 | 500 | full | 2x (240 / 1,200) |
+| Core | 10,000,000 | 25,000 | 1,000 | full | 4x (480 / 2,400) |
+
+Actions are runs, executions and coordination / Boundnet / Veilnet invokes. Receipts are run anchor confirmations, guest settlements and proof anchors. History limits list endpoints. Over a daily limit: HTTP 429, `code: "DAILY_LIMIT"`, `tier`, `limit`, `used`, `resetsAt`. Over the per-minute key rate: HTTP 429, `code: "RATE_LIMIT"`, `tier`, `limit`.
+
+**Arguments.** `apiKey` (optional), `sessionToken` (optional).
 
 ---
 
@@ -765,6 +785,7 @@ Links identity hash to execution hash on chain (`anchorPqAttestation`).
 | `veya_read_agent_onchain` | Registry | None |
 | `veya_guest_login` | Product | None (listing only) |
 | `veya_account` | Product | Key |
+| `veya_tier` | Product | None (table) or Key (your tier) |
 | `veya_list_environments` | Product | Key |
 | `veya_get_environment` | Product | Key |
 | `veya_create_environment` | Product | Key |
