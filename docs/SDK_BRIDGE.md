@@ -46,10 +46,10 @@ The hosted product API also imports the SDK. This tree's default is Mainnet, con
 From this package’s `package.json`:
 
 ```json
-"@veyanet/sdk": "1.2.11"
+"@veyanet/sdk": "1.2.13"
 ```
 
-MCP version is **1.2.11**. SDK version is **1.2.11** (exact pin, no caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
+MCP version is **1.2.13**. SDK version is **1.2.13** (exact pin, no caret). A clone of this repo runs `npm install` and pulls the SDK from the **npm registry**. Publish the SDK before the MCP so the chain-read tools resolve.
 
 ---
 
