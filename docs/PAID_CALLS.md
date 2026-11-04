@@ -306,4 +306,4 @@ To remove the feature, unset `VEYA_PAID_CALLS` and restart.
 - One process per state folder. Budgets and idempotency are enforced per VEYA account within a state folder, not across folders.
 - Keys are JavaScript strings while a call runs. The Solana key bytes are zeroed after the call; other references are dropped and left to garbage collection.
 - The task budget is a USDC budget enforced by VEYA before payment. It is not an onchain limit. `Veya.sol` spend values are in Robinhood Chain native wei, so the commitment on Robinhood Chain is not a USD or USDC spend limit.
-- Pinned versions: xPay SDK 0.2.38, `@x402/core` and `@x402/svm` 2.28.0, `@veyanet/sdk` 1.2.11. The same pins are in `config/paid-calls.json` (`pins`) and `mcp/package.json`.
+- Pinned versions: xPay SDK 0.2.38, `@x402/core` and `@x402/svm` 2.28.0, `@veyanet/sdk` 1.2.13. The same pins are in `config/paid-calls.json` (`pins`) and `mcp/package.json`.
