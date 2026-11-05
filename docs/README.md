@@ -53,8 +53,8 @@ flowchart TB
 
 | Item | Value |
 |------|-------|
-| npm | `@veyanet/mcp` **1.2.11** |
-| SDK | `@veyanet/sdk` **1.2.11** (exact pin) |
+| npm | `@veyanet/mcp` **1.2.13** |
+| SDK | `@veyanet/sdk` **1.2.13** (exact pin) |
 | Public connector | `https://mcp.veyanet.tech/mcp` |
 | Product API | `https://api.veyanet.tech` |
 | Default profile | Mainnet |
