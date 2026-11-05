@@ -133,7 +133,7 @@ Public paste URL still allows reads with no key. Prefer self-host for `VEYA_PAYE
 
 | Command | What it checks |
 |---------|----------------|
-| `npm run smoke` | In-process `initialize`, `tools/list` (51 tools), `veya_describe`, `veya_ping_chain` |
+| `npm run smoke` | In-process `initialize`, `tools/list` (52 tools), `veya_describe`, `veya_ping_chain` |
 | `npm test` | Unit tests (config, etc.) and the Metered Call Guard suite in `src/paid/` (mock money; needs the three validator nodes running) |
 | `npm run lint` | `tsc --noEmit` |
 | `tsx scripts/verify-full.ts` | Local MCP workflow: reads need no key, apiKey required for product tools, unfunded payer message |
@@ -179,7 +179,7 @@ Related: [AUTHENTICATION.md](./AUTHENTICATION.md) for product keys and own-walle
 
 Only for hosts with `VEYA_PAID_CALLS=1`. See [PAID_CALLS.md](./PAID_CALLS.md).
 
-1. `tools/list` shows **54 tools**, including `veya_paid_discover`, `veya_paid_call`, `veya_paid_run`, and no transfer, swap, trade or key tool.
+1. `tools/list` shows **55 tools**, including `veya_paid_discover`, `veya_paid_call`, `veya_paid_run`, and no transfer, swap, trade or key tool.
 2. Open the receipt: `GET /receipts/paid/<runId>` (or `.json`).
 3. **Payment.** Open the Solscan link. The transaction is finalized and moves the quoted amount of the pinned mint from the caller's wallet (the receipt's payer address) to the payee.
 4. **Validators.** The receipt shows at least 2 of 3 validators agreed.
