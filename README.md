@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="./assets/logo.png" width="400" alt="VEYA Logo" />
+  <img src="./assets/logo.png" width="640" alt="VEYA MCP (@veyanet/mcp)" />
 
   # VEYA MCP
 
   **The official Model Context Protocol server for post-quantum agent tools, chain verification, sealed-execution service info, and protocol settlement on Robinhood Chain.**
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.11-cb3837.svg?style=flat-edge)](./package.json)
+  [![Package](https://img.shields.io/badge/@veyanet/mcp-1.2.13-cb3837.svg?style=flat-edge)](./package.json)
   [![Node Version](https://img.shields.io/badge/Node-%3E%3D20-green.svg?style=flat-edge)](https://nodejs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-edge)](https://www.typescriptlang.org/)
   [![MCP Endpoint](https://img.shields.io/badge/MCP-mcp.veyanet.tech-0ea5e9.svg?style=flat-edge)](https://mcp.veyanet.tech/mcp)
@@ -243,7 +243,7 @@ https://mcp.veyanet.tech/mcp
 
 ## 🧩 Core Tools Overview
 
-`@veyanet/mcp` **1.2.11** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
+`@veyanet/mcp` **1.2.13** exposes the full agent surface. Full schemas: [docs/TOOLS.md](./docs/TOOLS.md). Reads need no key. Product tools need a site API key. Product on-chain writes spend **your** wallet and also need that API key. `veya_prove` does not. `veya_seal_decision` seals an evidence id and a decision. The receipt is written when that call passes `payerPrivateKey`, or when `VEYA_SEAL_DECISION_RELAYER=1`.
 
 ### 0. Proof
 
@@ -332,6 +332,24 @@ Args: (none)
 
 `GET {VEYA_API_URL}/health` (default `https://api.veyanet.tech/health`). Returns HTTP status and JSON body, including fleet status.
 
+#### Your $VEYA tier and limits
+
+```text
+Tool: veya_tier
+Args: apiKey (optional)
+```
+
+Without a key: the public tier table (`GET /public/holder-tiers`). With a key: your tier, summed balance, counted wallets (shortened), the limits that apply to your calls and today's use (`GET /v1/holder/tier`). The product API reads the $VEYA held by your sign-in wallet plus up to 3 linked wallets on Robinhood Chain mainnet and sets these limits from it (server defaults):
+
+| Tier | Whole $VEYA held (summed) | Daily actions | Daily receipts | Receipt history | API key rate per minute |
+|------|---------------------------|---------------|----------------|-----------------|-------------------------|
+| Base | under 1,000,000 | 2,000 | 100 | 90 days | 1x (dev 120, live 600) |
+| Holder | 1,000,000 | 5,000 | 250 | 365 days | 1.5x (180 / 900) |
+| Builder | 5,000,000 | 10,000 | 500 | full | 2x (240 / 1,200) |
+| Core | 10,000,000 | 25,000 | 1,000 | full | 4x (480 / 2,400) |
+
+A call over a daily limit returns HTTP 429 with `code: "DAILY_LIMIT"` and the `tier`; nothing is done. Link more wallets on the product site or with `VeyaTiers` in `@veyanet/sdk` (signature only, no transaction). The MCP host's own per-key limit (`VEYA_CAPACITY_PER_MINUTE`) is separate.
+
 ### 5. Authenticated On-Chain Writes
 
 Always available. `msg.sender` is **your** wallet, not the hosted signer.
@@ -381,7 +399,7 @@ Try it from any MCP client connected to `https://mcp.veyanet.tech/mcp`:
 }
 ```
 
-Keys are used in memory for that one call and never stored, logged or returned. Use dedicated wallets: a little USDC and SOL on Solana, a little ETH on Robinhood Chain. A missing value returns `API_KEY_REQUIRED`, `SOLANA_KEY_REQUIRED` or `ROBINHOOD_KEY_REQUIRED` and nothing happens. Servers without `VEYA_PAID_CALLS=1` list 51 tools; with it, 54. Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
+Keys are used in memory for that one call and never stored, logged or returned. Use dedicated wallets: a little USDC and SOL on Solana, a little ETH on Robinhood Chain. A missing value returns `API_KEY_REQUIRED`, `SOLANA_KEY_REQUIRED` or `ROBINHOOD_KEY_REQUIRED` and nothing happens. Servers without `VEYA_PAID_CALLS=1` list 52 tools; with it, 55. Guide: [docs/PAID_CALLS.md](./docs/PAID_CALLS.md).
 
 ---
 
