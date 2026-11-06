@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [1.2.13] — 2026-11-06
+
+Version alignment release: `@veyanet/mcp` and `@veyanet/sdk` both ship as 1.2.13, and the MCP pins that SDK exactly. No tool, schema or behaviour changes since 1.2.12: the server lists 52 tools, or 55 with the Metered Call Guard on.
+
+### Changed
+- Package version **1.2.13** (`MCP_SERVICE_VERSION`, so `/health` and the landing page report 1.2.13), `server.json`, `server.no-auth-header.json`, the config tests, the README badge and the docs (`ARCHITECTURE.md`, `CONFIGURATION.md`, `DEPLOYMENT.md`, `TRANSPORT.md`, `SDK_BRIDGE.md`, `docs/README.md`).
+- `@veyanet/sdk` dependency moved from `1.2.11` to **`1.2.13`** (exact pin). The only SDK code change since 1.2.11 is its added tiers client, which the MCP does not call (`veya_tier` talks to the product API directly). `pins.veyaSdk` in `config/paid-calls.json` and the pin list in `docs/PAID_CALLS.md` match.
+- `src/config.test.ts` and `scripts/verify-live-workflow.ts` send `clientInfo` version `1.2.13`. Test and script only.
+- Package logo (`assets/logo.png`): the VEYA wordmark on a dark card with the package name, readable in GitHub light and dark mode. The README shows it at 640 px.
+
+### Fixed
+- `server.json` and `server.no-auth-header.json` still said `1.2.11` in 1.2.12. They now match the package version.
+- `docs/SDK_BRIDGE.md`, `docs/ARCHITECTURE.md`, `docs/README.md` and `docs/PAID_CALLS.md` described an SDK 1.2.11 pin; they now say 1.2.13.
+
+## [1.2.12] — 2026-11-01
+
+Adds one tool for the product API's $VEYA account tiers and the `/stats` endpoint. The server lists 52 tools, or 55 with the Metered Call Guard on.
+
+### Added
+- `veya_tier`: without a key returns the public tier table (`GET /public/holder-tiers`); with `apiKey` or a session token returns your tier, summed balance, counted wallets, the limits that apply to your calls (daily actions, daily receipts, receipt history window, API key rate per minute) and today's use (`GET /v1/holder/tier`). A 4xx answer is an MCP error, so a `DAILY_LIMIT` refusal shows as a failure with its `tier`.
+- `GET /stats` on the HTTP server: tool-call counts per UTC hour, with 24-hour, 7-day and 30-day totals, a 30-day daily series and the top tools of the last 7 days. Only registered tool names and counts are kept, in `tool-stats.json` under `VEYA_STATS_DIR`, else `<VEYA_PAID_ROOT>/state`, else `~/.veya/mcp`. Metered Call Guard tools are grouped as `metered_calls`. Counts are saved every 5 seconds and on `SIGINT` / `SIGTERM`.
+- `src/tier.test.ts` (4 tests, real MCP client against a local fake API).
+- README, `docs/TOOLS.md`: what the tiers are, how the API works them out (sign-in wallet plus up to 3 linked wallets, summed on Robinhood Chain mainnet) and the default limits.
+
+### Changed
+- Package version **1.2.12** (`MCP_SERVICE_VERSION`, `/health`, the landing page), the config tests, the README badge and the docs (`ARCHITECTURE.md`, `CONFIGURATION.md`, `DEPLOYMENT.md`, `TRANSPORT.md`, `SDK_BRIDGE.md`, `docs/README.md`). Tool counts in the README, `docs/TOOLS.md`, `docs/ARCHITECTURE.md` and `docs/VERIFICATION.md` are now 52 / 55.
+- `@veyanet/sdk` stays at **1.2.11** (exact pin); the MCP does not need the SDK's new tiers client. (This is what was published as 1.2.12; 1.2.13 moves the pin so the MCP and SDK versions match.)
+
 ## [1.2.11] — 2026-10-30
 
 Version, dependency, wording and documentation release. No tool, schema or behaviour changes since 1.2.10: the server still lists 51 tools, or 54 with the Metered Call Guard on. Some tool descriptions and error message texts are reworded (see Changed); their codes are the same.
